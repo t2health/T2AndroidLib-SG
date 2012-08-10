@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu
+  xmlns:android="http://schemas.android.com/apk/res/android">
+		<item android:id="@+id/deleteFiles" android:title="Delete all log files"></item>  
+		<item android:id="@+id/deleteLogCat" android:title="Del LogCat "></item>  
+		<item android:id="@+id/saveLogCat" android:title="Save LogCat"></item>  
+</menu>
