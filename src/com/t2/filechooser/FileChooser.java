@@ -65,7 +65,8 @@ public class FileChooser extends ListActivity {
 	
 	private static final int FILTER_DATA = 0;
 	private static final int FILTER_CAT = 1;
-	private static final int FILTER_ALL = 2;
+	private static final int FILTER_PDF = 2;
+	private static final int FILTER_ALL = 3;
 	
     private File currentDir;
     private FileArrayAdapter adapter;
@@ -359,6 +360,11 @@ public class FileChooser extends ListActivity {
 						
 					case  FILTER_CAT:
 						if (fileName.endsWith(".log") && fileName.contains("cat"))
+							fls.add(new Option(ff.getName(),"File Size: "+ff.length(),ff.getAbsolutePath()));
+						break;
+						
+					case  FILTER_PDF:
+						if (fileName.endsWith(".pdf") )
 							fls.add(new Option(ff.getName(),"File Size: "+ff.length(),ff.getAbsolutePath()));
 						break;
 						
