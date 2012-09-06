@@ -4,12 +4,17 @@ package org.t2health.lib1;
 
 import java.io.IOException;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.GregorianCalendar;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.codehaus.jackson.node.ArrayNode;
 import org.codehaus.jackson.node.JsonNodeFactory;
@@ -32,10 +37,16 @@ import com.couchbase.touchdb.TDViewMapEmitBlock;
 import com.couchbase.touchdb.ektorp.TouchDBHttpClient;
 import com.couchbase.touchdb.router.TDURLStreamHandlerFactory;
 
+import com.loopj.android.http.AsyncHttpResponseHandler;
+import com.loopj.android.http.RequestParams;
+
+
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.preference.PreferenceManager;
 import android.util.Log;
 
@@ -62,10 +73,14 @@ import android.util.Log;
  */
 public class DataOutHandler {
 	private static final String TAG = "BFDemo";	
+
+//	private static final String COUCHBASE_URL = "http://gap.t2health.org/and/phpWebservice/webservice2.php";	 
+	private static final String COUCHBASE_URL = "http://gap.t2health.org/and/json.php";	 
+	
 	private static final int LOG_FORMAT_JSON = 1;	
 	private static final int LOG_FORMAT_FLAT = 2;	
 	
-	public static final String TIME_STAMP = "TS";
+	public static final String TIME_STAMP = "\"TS\"";
 	public static final String SENSOR_TIME_STAMP = "STS";
 	public static final String RAW_GSR = "GSR";					// Microsiemens
 	public static final String AVERAGE_GSR = "GSRAVG";			// Microsiemens 1 sec average
@@ -120,6 +135,14 @@ public class DataOutHandler {
 	
 	String mDatabaseName;	
 	String mRemoteDatabase;
+	List<T2RestPacket> mPendingQueue;
+	List<T2RestPacket> mPostingQueue;
+	boolean httpInProgress = false;
+
+	/**
+	 * Thread used to communicate messages in mPendingQueue to server
+	 */
+	private DispatchThread mDispatchThread = null;	
 	
 	
     public static SimpleDateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
@@ -157,6 +180,10 @@ public class DataOutHandler {
 		mDatabaseEnabled = true;
 	}
 	
+	
+				
+
+	
 	/**
 	 * Starts up TouchDB database
 	 * 
@@ -170,60 +197,68 @@ public class DataOutHandler {
 		mDatabaseEnabled = true;
 		mRemoteDatabase = remoteDatabase;
 		mDatabaseName = databaseName;
-
-		Log.v(TAG, "starting TouchBase");
-
-		// Start TouchDB
-		String filesDir = mContext.getFilesDir().getAbsolutePath();
-	    try {
-            server = new TDServer(filesDir);
-        } catch (IOException e) {
-            Log.e(TAG, "Error starting TDServer", e);
-        }		
 		
-	    //install a view definition needed by the application
-	    TDDatabase db = server.getDatabaseNamed(mDatabaseName);
-	    
-	    
-	    TDView view = db.getViewNamed(String.format("%s/%s", designDocName, viewName));
-	    view.setMapReduceBlocks(new TDViewMapBlock() {
+		Log.v(TAG, "Initializing T2 database dispatcher");
+		mPendingQueue = new ArrayList<T2RestPacket>();		
+		mPostingQueue = new ArrayList<T2RestPacket>();
+		
+		mDispatchThread = new DispatchThread();
+		mDispatchThread.start();		
+		
 
-            @Override
-            public void map(Map<String, Object> document, TDViewMapEmitBlock emitter) {
-                Object createdAt = document.get("created_at");
-                if(createdAt != null) {
-                    emitter.emit(createdAt.toString(), document);
-                }
-            }
-        }, null, "1.0");  
-	    
-	    // Start ektorp
-		Log.v(TAG, "starting TouchBase ektorp");
-
-		if(httpClient != null) {
-			httpClient.shutdown();
-		}
-
-		httpClient = new TouchDBHttpClient(server);
-		dbInstance = new StdCouchDbInstance(httpClient);	    
-
-		T2EktorpAsyncTask startupTask = new T2EktorpAsyncTask() {
-
-			@Override
-			protected void doInBackground() {
-				couchDbConnector = dbInstance.createConnector(mDatabaseName, true);
-				Log.v(TAG, "TouchBase Created");
-				
-			}
-
-			@Override
-			protected void onSuccess() {
-				// These need to be started manually now
-				//startReplications();
-				startPushReplications();				
-			}
-		};
-		startupTask.execute();
+//		Log.v(TAG, "starting TouchBase");
+//
+//		// Start TouchDB
+//		String filesDir = mContext.getFilesDir().getAbsolutePath();
+//	    try {
+//            server = new TDServer(filesDir);
+//        } catch (IOException e) {
+//            Log.e(TAG, "Error starting TDServer", e);
+//        }		
+//		
+//	    //install a view definition needed by the application
+//	    TDDatabase db = server.getDatabaseNamed(mDatabaseName);
+//	    
+//	    
+//	    TDView view = db.getViewNamed(String.format("%s/%s", designDocName, viewName));
+//	    view.setMapReduceBlocks(new TDViewMapBlock() {
+//
+//            @Override
+//            public void map(Map<String, Object> document, TDViewMapEmitBlock emitter) {
+//                Object createdAt = document.get("created_at");
+//                if(createdAt != null) {
+//                    emitter.emit(createdAt.toString(), document);
+//                }
+//            }
+//        }, null, "1.0");  
+//	    
+//	    // Start ektorp
+//		Log.v(TAG, "starting TouchBase ektorp");
+//
+//		if(httpClient != null) {
+//			httpClient.shutdown();
+//		}
+//
+//		httpClient = new TouchDBHttpClient(server);
+//		dbInstance = new StdCouchDbInstance(httpClient);	    
+//
+//		T2EktorpAsyncTask startupTask = new T2EktorpAsyncTask() {
+//
+//			@Override
+//			protected void doInBackground() {
+//				couchDbConnector = dbInstance.createConnector(mDatabaseName, true);
+//				Log.v(TAG, "TouchBase Created");
+//				
+//			}
+//
+//			@Override
+//			protected void onSuccess() {
+//				// These need to be started manually now
+//				//startReplications();
+//				startPushReplications();				
+//			}
+//		};
+//		startupTask.execute();
 	}		
 
 	public void startPushReplications() {
@@ -393,6 +428,8 @@ public class DataOutHandler {
 	 * Closes out any open log files and data connections
 	 */
 	public void close() {
+
+		Log.e(TAG, " ***********************************closing ******************************");
 		mDatabaseEnabled = false;
 		if (mLoggingEnabled) {
 			if (mLogFormat == LOG_FORMAT_JSON) {
@@ -408,7 +445,16 @@ public class DataOutHandler {
 
 		if(server != null) {
 		    server.close();
-		}		
+		}
+		
+		if(mDispatchThread != null) {
+			mDispatchThread.cancel();
+			mDispatchThread.interrupt();
+			mDispatchThread = null;
+		}
+		
+		
+		
 	}
 
 	/**
@@ -422,7 +468,7 @@ public class DataOutHandler {
 	public class DataOutPacket {
 		
 		public String mStr = "";
-		ObjectNode mItem;		
+		public ObjectNode mItem;		
 		
 		public DataOutPacket() {
 	    	UUID uuid = UUID.randomUUID();
@@ -583,33 +629,61 @@ public class DataOutHandler {
 		}
 
 		if (mLogCatEnabled) {
-			Log.d(TAG, packet.mStr);			
+			//Log.d(TAG, packet.mStr);			
 		}
 		
-		// Now do something with the database if necessary
-		if (mDatabaseEnabled && couchDbConnector != null) {
-			Log.d(TAG, "Adding document");
+		if (mDatabaseEnabled) {
+			String dataPacketString = packet.mItem.toString();
+			T2RestPacket pkt = new T2RestPacket(dataPacketString);
+			Log.d(TAG, "Queueing document " + pkt.mId);
+	    
+			
+			
+			
+//			String jsonString = "[" + dataPacketString + "]";
+//			RequestParams params = new RequestParams("json", jsonString);
+//	        T2RestClient.post(COUCHBASE_URL, params, new AsyncHttpResponseHandler() {
+//	            @Override
+//	            public void onSuccess(String response) {
+//					Log.d(TAG, "Posing Successful: " + response);
+//	                
+//	            }
+//	        });
 
-			T2EktorpAsyncTask createItemTask = new T2EktorpAsyncTask() {
-
-				@Override
-				protected void doInBackground() {
-					couchDbConnector.create(packet.mItem);
-				}
-
-				@Override
-				protected void onSuccess() {
-					Log.d(TAG, "Document added to database successfully");
-				}
-
-				@Override
-				protected void onUpdateConflict(
-						UpdateConflictException updateConflictException) {
-					Log.d(TAG, "Got an update conflict for: " + packet.mItem.toString());
-				}
-			};
-		    createItemTask.execute();			
-		} // End if (mDatabaseEnabled)
+			
+			
+			
+			synchronized(mPendingQueue) {
+				mPendingQueue.add(0,  pkt);
+			}
+		}
+		
+		
+		
+//		// Now do something with the database if necessary
+//		if (mDatabaseEnabled && couchDbConnector != null) {
+//			Log.d(TAG, "Adding document");
+//
+//			T2EktorpAsyncTask createItemTask = new T2EktorpAsyncTask() {
+//
+//				@Override
+//				protected void doInBackground() {
+//					couchDbConnector.create(packet.mItem);
+//				}
+//
+//				@Override
+//				protected void onSuccess() {
+//					Log.d(TAG, "Document added to database successfully");
+//				}
+//
+//				@Override
+//				protected void onUpdateConflict(
+//						UpdateConflictException updateConflictException) {
+//					Log.d(TAG, "Got an update conflict for: " + packet.mItem.toString());
+//				}
+//			};
+//		    createItemTask.execute();			
+//		} // End if (mDatabaseEnabled && couchDbConnector != null)
 	}
 
 	/**
@@ -621,5 +695,137 @@ public class DataOutHandler {
 		DataOutPacket packet = new DataOutPacket();
 		packet.add(NOTE, note);
 		handleDataOut(packet);				
-	}	
+	}
+	
+	
+	class DispatchThread extends Thread {
+		private boolean isRunning = false;
+		private boolean cancelled = false;
+
+		@Override
+		public void run() {
+			isRunning = true;
+			
+			
+			while(true) {
+				// Break out if this was cancelled.
+				if(cancelled) {
+					break;
+				}
+				
+				try {
+					Thread.sleep(1000);
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				Log.d(TAG, "thread tick");
+
+				// If the network is available post entries from the PendingQueue
+//				if (isNetworkAvailable() && !httpInProgress) {
+				if (isNetworkAvailable()) {
+					httpInProgress = true;
+					synchronized(mPendingQueue) {
+	
+						if (mPendingQueue.size() > 0) {
+							// Fill the posting Queue with all of the items that need to be posted
+							// We need this array so when we get a response we can remove all of these entries from the PendingQueue
+							String jsonString  = "[";
+							int iteration = 0;
+							Iterator<T2RestPacket> iterator = mPendingQueue.iterator();						
+							while(iterator.hasNext()) {
+								
+								T2RestPacket packet = iterator.next();
+								if (packet.mStatus == T2RestPacket.STATUS_PENDING) {
+									
+									 packet.mStatus = T2RestPacket.STATUS_POSTED;
+									 
+									 if (iteration++ > 0)
+										 jsonString += "," + packet.mJson;
+									 else
+										 jsonString += packet.mJson;
+										 
+									 Log.d(TAG, "Posting document " + packet.mId);
+									 mPostingQueue.add(packet);									 
+									
+								}
+							}
+							
+							jsonString += "]";
+							
+							// If there is somethig in the postingQueue then send it http
+							if (mPostingQueue.size() > 0) {
+								Log.d(TAG, "Sending " + mPostingQueue.size() + " entries");
+//								Log.d(TAG, "Actual postingstring: " + jsonString);
+								RequestParams params = new RequestParams("json", jsonString);
+						        T2RestClient.post(COUCHBASE_URL, params, new AsyncHttpResponseHandler() {
+						            @Override
+						            public void onSuccess(String response) {
+										Log.d(TAG, "Posing Successful: " + response);
+						                
+						            }
+						        });	
+						        mPostingQueue.clear();
+							}
+					        
+//					        // Now remove entries in posting queue from pending queue
+//							Iterator<T2RestPacket> iterator1 = mPostingQueue.iterator();						
+//							while(iterator1.hasNext()) {
+//								T2RestPacket packet = iterator.next();
+//								mPendingQueue.remove(packet);
+//								Log.d(TAG, "Removing document " + packet.mId);
+//							}					        
+//					        
+					        
+					        
+					        
+														
+						} // End if (mPendingQueue.size() > 0)
+						
+					} // End synchronized(mPendingQueue) 
+				}
+				
+				
+				
+				
+				
+				
+
+				
+				
+				
+			} // End while(true)
+			
+
+			isRunning = false;
+		} // End public void run() 
+		
+		
+		
+		public void cancel() {
+			this.cancelled = true;
+			Log.e(TAG, "Cancelled");
+			
+		}
+		
+		public boolean isRunning() {
+			return this.isRunning;
+		}
+		
+		
+	}
+	
+    public boolean isNetworkAvailable() {
+        ConnectivityManager cm = (ConnectivityManager) 
+          mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo networkInfo = cm.getActiveNetworkInfo();
+        // if no network is available networkInfo will be null
+        // otherwise check if we are connected
+        if (networkInfo != null && networkInfo.isConnected()) {
+            return true;
+        }
+        return false;
+    } 	
+	
+	
 }
