@@ -2,7 +2,7 @@ package org.t2health.lib1;
 
 
 
-import java.io.IOException;
+
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -11,43 +11,30 @@ import java.util.GregorianCalendar;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.codehaus.jackson.node.ArrayNode;
 import org.codehaus.jackson.node.JsonNodeFactory;
 import org.codehaus.jackson.node.ObjectNode;
-import org.ektorp.CouchDbConnector;
-import org.ektorp.CouchDbInstance;
-import org.ektorp.ReplicationCommand;
-import org.ektorp.UpdateConflictException;
-import org.ektorp.http.HttpClient;
-import org.ektorp.impl.StdCouchDbInstance;
-import org.json.JSONArray;
 import org.json.JSONObject;
 import org.t2health.lib1.LogWriter;
 
-import com.couchbase.touchdb.TDDatabase;
-import com.couchbase.touchdb.TDServer;
-import com.couchbase.touchdb.TDView;
-import com.couchbase.touchdb.TDViewMapBlock;
-import com.couchbase.touchdb.TDViewMapEmitBlock;
-import com.couchbase.touchdb.ektorp.TouchDBHttpClient;
-import com.couchbase.touchdb.router.TDURLStreamHandlerFactory;
+//import org.ektorp.CouchDbConnector;
+//import org.ektorp.CouchDbInstance;
+//import org.ektorp.ReplicationCommand;
+//import org.ektorp.http.HttpClient;
+//import com.couchbase.touchdb.TDServer;
+//import com.couchbase.touchdb.router.TDURLStreamHandlerFactory;
 
 import com.loopj.android.http.AsyncHttpResponseHandler;
 import com.loopj.android.http.RequestParams;
 
 
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
-import android.preference.PreferenceManager;
 import android.util.Log;
 
 
@@ -123,21 +110,27 @@ public class DataOutHandler {
 	private int mLogFormat = LOG_FORMAT_JSON;	
 //	private int mLogFormat = LOG_FORMAT_FLAT;	
 	
-	//couch internals
-	protected static TDServer server;
-	protected static HttpClient httpClient;
-
-	//ektorp impl
-	protected CouchDbInstance dbInstance;
-	protected CouchDbConnector couchDbConnector;
-	protected ReplicationCommand pushReplicationCommand;
-	protected ReplicationCommand pullReplicationCommand;
+//	//couch internals
+//	protected static TDServer server;
+//	protected static HttpClient httpClient;
+//
+//	//ektorp impl
+//	protected CouchDbInstance dbInstance;
+//	protected CouchDbConnector couchDbConnector;
+//	protected ReplicationCommand pushReplicationCommand;
+//	protected ReplicationCommand pullReplicationCommand;
 	
 	String mDatabaseName;	
 	String mRemoteDatabase;
+	/**
+	 * Queue for Rest packets waiting to be sent via HTTP
+	 */
 	List<T2RestPacket> mPendingQueue;
+
+	/**
+	 * Queue for Rest packets which have been send via HTTP
+	 */
 	List<T2RestPacket> mPostingQueue;
-	boolean httpInProgress = false;
 
 	/**
 	 * Thread used to communicate messages in mPendingQueue to server
@@ -152,10 +145,10 @@ public class DataOutHandler {
 	 */
 	private String mApplicationVersion = "";
 	
-    //static inializer to ensure that touchdb:// URLs are handled properly
-    {
-        TDURLStreamHandlerFactory.registerSelfIgnoreError();
-    }	
+//    //static inializer to ensure that touchdb:// URLs are handled properly
+//    {
+//        TDURLStreamHandlerFactory.registerSelfIgnoreError();
+//    }	
 	
 	
 	/**
@@ -261,120 +254,120 @@ public class DataOutHandler {
 //		startupTask.execute();
 	}		
 
-	public void startPushReplications() {
-		pushReplicationCommand = new ReplicationCommand.Builder()
-		.source(mDatabaseName)
-		.target(mRemoteDatabase)
-		.createTarget(true)
-//		.createTarget(false)
-		.continuous(true)
-		.build();
-
-		T2EktorpAsyncTask pushReplication = new T2EktorpAsyncTask() {
-	
-			@Override
-			protected void doInBackground() {
-				dbInstance.replicate(pushReplicationCommand);
-			}
-		};
-	
-		pushReplication.execute();		
-	}	
-	public void startPullReplications() {
-		pullReplicationCommand = new ReplicationCommand.Builder()
-		.source(mRemoteDatabase)
-		.target(mDatabaseName)
-		.continuous(true)
-		.build();
-
-		T2EktorpAsyncTask pullReplication = new T2EktorpAsyncTask() {
-	
-			@Override
-			protected void doInBackground() {
-				dbInstance.replicate(pullReplicationCommand);
-			}
-		};
-	
-		pullReplication.execute();		
-	}	
-
-	public void stopPushReplications() {
-		pushReplicationCommand = new ReplicationCommand.Builder()
-		.source(mDatabaseName)
-		.target(mRemoteDatabase)
-		.cancel(true)
-		.build();
-
-		T2EktorpAsyncTask pushReplication = new T2EktorpAsyncTask() {
-	
-			@Override
-			protected void doInBackground() {
-				dbInstance.replicate(pushReplicationCommand);
-			}
-		};
-	
-		pushReplication.execute();			
-	}	
-	
-	
-	public void stopPullReplications() {
-		pullReplicationCommand = new ReplicationCommand.Builder()
-		.source(mRemoteDatabase)
-		.target(mDatabaseName)
-		.cancel(true)
-		.build();
-
-		T2EktorpAsyncTask pullReplication = new T2EktorpAsyncTask() {
-	
-			@Override
-			protected void doInBackground() {
-				dbInstance.replicate(pullReplicationCommand);
-			}
-		};
-	
-		pullReplication.execute();			
-	}	
-	
-	public void startReplications() {
-		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mContext);
-	
-		pushReplicationCommand = new ReplicationCommand.Builder()
-			.source(mDatabaseName)
-			.target(mRemoteDatabase)
-//			.createTarget(true)
-			
-			.continuous(true)
-			.build();
-	
-		T2EktorpAsyncTask pushReplication = new T2EktorpAsyncTask() {
-	
-			@Override
-			protected void doInBackground() {
-				dbInstance.replicate(pushReplicationCommand);
-			}
-		};
-	
-		pushReplication.execute();
-	
-		pullReplicationCommand = new ReplicationCommand.Builder()
-			.source(mRemoteDatabase)
-			.target(mDatabaseName)
-//			.createTarget(true)
-			
-			.continuous(true)
-			.build();
-	
-		T2EktorpAsyncTask pullReplication = new T2EktorpAsyncTask() {
-	
-			@Override
-			protected void doInBackground() {
-				dbInstance.replicate(pullReplicationCommand);
-			}
-		};
-	
-		pullReplication.execute();
-	}
-	
+//	public void startPushReplications() {
+//		pushReplicationCommand = new ReplicationCommand.Builder()
+//		.source(mDatabaseName)
+//		.target(mRemoteDatabase)
+//		.createTarget(true)
+////		.createTarget(false)
+//		.continuous(true)
+//		.build();
+//
+//		T2EktorpAsyncTask pushReplication = new T2EktorpAsyncTask() {
+//	
+//			@Override
+//			protected void doInBackground() {
+//				dbInstance.replicate(pushReplicationCommand);
+//			}
+//		};
+//	
+//		pushReplication.execute();		
+//	}	
+//	public void startPullReplications() {
+//		pullReplicationCommand = new ReplicationCommand.Builder()
+//		.source(mRemoteDatabase)
+//		.target(mDatabaseName)
+//		.continuous(true)
+//		.build();
+//
+//		T2EktorpAsyncTask pullReplication = new T2EktorpAsyncTask() {
+//	
+//			@Override
+//			protected void doInBackground() {
+//				dbInstance.replicate(pullReplicationCommand);
+//			}
+//		};
+//	
+//		pullReplication.execute();		
+//	}	
+//
+//	public void stopPushReplications() {
+//		pushReplicationCommand = new ReplicationCommand.Builder()
+//		.source(mDatabaseName)
+//		.target(mRemoteDatabase)
+//		.cancel(true)
+//		.build();
+//
+//		T2EktorpAsyncTask pushReplication = new T2EktorpAsyncTask() {
+//	
+//			@Override
+//			protected void doInBackground() {
+//				dbInstance.replicate(pushReplicationCommand);
+//			}
+//		};
+//	
+//		pushReplication.execute();			
+//	}	
+//	
+//	
+//	public void stopPullReplications() {
+//		pullReplicationCommand = new ReplicationCommand.Builder()
+//		.source(mRemoteDatabase)
+//		.target(mDatabaseName)
+//		.cancel(true)
+//		.build();
+//
+//		T2EktorpAsyncTask pullReplication = new T2EktorpAsyncTask() {
+//	
+//			@Override
+//			protected void doInBackground() {
+//				dbInstance.replicate(pullReplicationCommand);
+//			}
+//		};
+//	
+//		pullReplication.execute();			
+//	}	
+//	
+//	public void startReplications() {
+//		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mContext);
+//	
+//		pushReplicationCommand = new ReplicationCommand.Builder()
+//			.source(mDatabaseName)
+//			.target(mRemoteDatabase)
+////			.createTarget(true)
+//			
+//			.continuous(true)
+//			.build();
+//	
+//		T2EktorpAsyncTask pushReplication = new T2EktorpAsyncTask() {
+//	
+//			@Override
+//			protected void doInBackground() {
+//				dbInstance.replicate(pushReplicationCommand);
+//			}
+//		};
+//	
+//		pushReplication.execute();
+//	
+//		pullReplicationCommand = new ReplicationCommand.Builder()
+//			.source(mRemoteDatabase)
+//			.target(mDatabaseName)
+////			.createTarget(true)
+//			
+//			.continuous(true)
+//			.build();
+//	
+//		T2EktorpAsyncTask pullReplication = new T2EktorpAsyncTask() {
+//	
+//			@Override
+//			protected void doInBackground() {
+//				dbInstance.replicate(pullReplicationCommand);
+//			}
+//		};
+//	
+//		pullReplication.execute();
+//	}
+//	
 	
 	
 	public void enableLogging(Context context) {
@@ -438,14 +431,15 @@ public class DataOutHandler {
 			mLogWriter.close();			
 		}
 		
-		//clean up our http client connection manager
-		if(httpClient != null) {
-			httpClient.shutdown();
-		}
-
-		if(server != null) {
-		    server.close();
-		}
+		//clean up our TohchDB http client connection manager
+//		if(httpClient != null) {
+//			httpClient.shutdown();
+//		}
+//
+//		//clean up our TohchDB Sever
+//		if(server != null) {
+//		    server.close();
+//		}
 		
 		if(mDispatchThread != null) {
 			mDispatchThread.cancel();
@@ -722,9 +716,7 @@ public class DataOutHandler {
 				Log.d(TAG, "thread tick");
 
 				// If the network is available post entries from the PendingQueue
-//				if (isNetworkAvailable() && !httpInProgress) {
 				if (isNetworkAvailable()) {
-					httpInProgress = true;
 					synchronized(mPendingQueue) {
 	
 						if (mPendingQueue.size() > 0) {
