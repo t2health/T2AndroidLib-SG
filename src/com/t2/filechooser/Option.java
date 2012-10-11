@@ -1,3 +1,6 @@
+/*
+ * 
+ */
 package com.t2.filechooser;
 
 public class Option implements Comparable<Option>{

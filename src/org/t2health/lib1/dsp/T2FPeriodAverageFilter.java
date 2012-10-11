@@ -1,3 +1,6 @@
+/*
+ * 
+ */
 package org.t2health.lib1.dsp;
 
 public class T2FPeriodAverageFilter extends T2Filter {
