@@ -1,3 +1,6 @@
+/*
+ * 
+ */
 package com.t2.filechooser;
 
 import java.util.List;
