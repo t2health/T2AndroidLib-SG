@@ -101,13 +101,15 @@ public class DataOutHandler {
 	public boolean mLogCatEnabled = false;	
 	public boolean mLoggingEnabled = false;	
 	private boolean mDatabaseEnabled = false;
+	private boolean mSessionIdEnabled = false;
 	
 	public String mUserId = "";
-	public String mSessionId = "";
+	public String mSessionDate = "";
 	public String mAppName = "";
 	private LogWriter mLogWriter;	
 	private Context mContext;
 	private int mLogFormat = LOG_FORMAT_JSON;	
+	private long mSessionId;
 //	private int mLogFormat = LOG_FORMAT_FLAT;	
 	
 //	//couch internals
@@ -156,12 +158,30 @@ public class DataOutHandler {
 	 * 
 	 * @param context	- Context of calling activity
 	 * @param userId	- User ID detected by calling activity 
-	 * @param sessionId - Session ID created by the calling activity (data/time stamp)
+	 * @param sessionDate - Session date created by the calling activity (data/time stamp)
 	 */
-	public DataOutHandler(Context context, String userId, String sessionId, String appName) {
+	public DataOutHandler(Context context, String userId, String sessionDate, String appName) {
 		mAppName = appName;
 		mContext = context;
 		mUserId = userId;
+		mSessionDate = sessionDate;
+		mSessionIdEnabled = false;
+	}
+	
+	/**
+	 * Constructor. Initializes context and user/session parameters
+	 * 
+	 * @param context	- Context of calling activity
+	 * @param userId	- User ID detected by calling activity 
+	 * @param sessionDate - Session date created by the calling activity (data/time stamp)
+	 * @param sessionId - long giveing a session ID to be included in all packets
+	 */
+	public DataOutHandler(Context context, String userId, String sessionDate, String appName, long sessionId) {
+		mAppName = appName;
+		mContext = context;
+		mUserId = userId;
+		mSessionDate = sessionDate;
+		mSessionIdEnabled = true;
 		mSessionId = sessionId;
 	}
 	
@@ -373,7 +393,7 @@ public class DataOutHandler {
 	public void enableLogging(Context context) {
 		try {
 			mLogWriter = new LogWriter(context);	
-			String logFileName = mUserId + "_" + mSessionId + ".log";			
+			String logFileName = mUserId + "_" + mSessionDate + ".log";			
 			mLogWriter.open(logFileName, true);	
 			mLoggingEnabled = true;
 			
@@ -389,11 +409,11 @@ public class DataOutHandler {
 			if (mLogFormat == LOG_FORMAT_JSON) {
 				String preamble = String.format(
 						"{\"userId\" : \"%s\",\n" +
-						"\"sessionId\" : \"%s\",\n" + 
+						"\"sessionDate\" : \"%s\",\n" + 
 						"\"timeId\" : \"%s\",\n" + 
 						"\"versionId\" : \"%s\",\n" + 
 						"\"data\":[",  
-						mUserId, mSessionId, timeId, mApplicationVersion);
+						mUserId, mSessionDate, timeId, mApplicationVersion);
 				mLogWriter.write(preamble);
 			}
 		} catch (Exception e) {
@@ -478,13 +498,14 @@ public class DataOutHandler {
 				mStr = TIME_STAMP + ",";			
 			}
 			
-			// mItem is for TouchDB only
 	    	mItem = JsonNodeFactory.instance.objectNode();		
 	    	mItem.put("_id", id);
 	    	mItem.put("created_at", currentTimeString);
 	    	mItem.put("user_id", mUserId);
-	    	mItem.put("session_id", mSessionId);
-	    	
+	    	mItem.put("session_date", mSessionDate);
+	    	if (mSessionIdEnabled) {
+		    	mItem.put("session_id", mSessionId);
+	    	}
 		}
 
 		/**
@@ -623,7 +644,7 @@ public class DataOutHandler {
 		}
 
 		if (mLogCatEnabled) {
-			//Log.d(TAG, packet.mStr);			
+			Log.d(TAG, packet.mStr);			
 		}
 		
 		if (mDatabaseEnabled) {
@@ -708,18 +729,20 @@ public class DataOutHandler {
 				}
 				
 				try {
-					Thread.sleep(1000);
+					Thread.sleep(4000);
 				} catch (InterruptedException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
-				Log.d(TAG, "thread tick");
+				Log.d(TAG, "Http dispatch thread tick");
 
 				// If the network is available post entries from the PendingQueue
 				if (isNetworkAvailable()) {
 					synchronized(mPendingQueue) {
 	
 						if (mPendingQueue.size() > 0) {
+							Log.d(TAG, "pending queue size =  " + mPendingQueue.size() );
+
 							// Fill the posting Queue with all of the items that need to be posted
 							// We need this array so when we get a response we can remove all of these entries from the PendingQueue
 							String jsonString  = "[";
@@ -760,6 +783,10 @@ public class DataOutHandler {
 						        mPostingQueue.clear();
 							}
 					        
+							// For now we'll just clear out the pending queue too.
+							// Eventually we should check responses against the pending queue and delete entries only when we get a successful response 
+							mPendingQueue.clear();
+							
 //					        // Now remove entries in posting queue from pending queue
 //							Iterator<T2RestPacket> iterator1 = mPostingQueue.iterator();						
 //							while(iterator1.hasNext()) {
