@@ -124,6 +124,9 @@ public class DataOutHandler {
 	public static final String HRV_RAW_SDNN = "SDNN";				// SDNN
 	public static final String NOTE = "note";
 
+	public static final String DATA_TYPE_RATING = "RatingData";
+	public static final String DATA_TYPE_INTERNAL_SENSOR = "InternalSensor";
+	public static final String DATA_TYPE_EXTERNAL_SENSOR = "ExternalSensor";
 	
 	public boolean mLogCatEnabled = false;	
 	public boolean mLoggingEnabled = false;	
@@ -133,6 +136,7 @@ public class DataOutHandler {
 	public String mUserId = "";
 	public String mSessionDate = "";
 	public String mAppName = "";
+	public String mDataType = "";
 	private LogWriter mLogWriter;	
 	private Context mContext;
 	private int mLogFormat = LOG_FORMAT_JSON;	
@@ -203,8 +207,9 @@ public class DataOutHandler {
 	 * @param sessionDate - Session date created by the calling activity (data/time stamp)
 	 * @param sessionId - long giveing a session ID to be included in all packets
 	 */
-	public DataOutHandler(Context context, String userId, String sessionDate, String appName, long sessionId) {
+	public DataOutHandler(Context context, String userId, String sessionDate, String appName, String dataType, long sessionId) {
 		mAppName = appName;
+		mDataType = dataType;
 		mContext = context;
 		mUserId = userId;
 		mSessionDate = sessionDate;
@@ -533,6 +538,9 @@ public class DataOutHandler {
 	    	if (mSessionIdEnabled) {
 		    	mItem.put("session_id", mSessionId);
 	    	}
+	    	mItem.put("app_name", mAppName);
+	    	mItem.put("data_type", mDataType);
+	    	mItem.put("platform", "Android");
 		}
 
 		/**
