@@ -38,6 +38,7 @@ import java.util.GregorianCalendar;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
+import java.util.TimeZone;
 import java.util.UUID;
 
 import org.codehaus.jackson.node.ArrayNode;
@@ -520,6 +521,7 @@ public class DataOutHandler {
 	    	UUID uuid = UUID.randomUUID();
 	    	Calendar calendar = GregorianCalendar.getInstance();
 	    	long currentTime = calendar.getTimeInMillis();
+	    	dateFormatter.setTimeZone(TimeZone.getTimeZone("UTC"));
 	        String currentTimeString = dateFormatter.format(calendar.getTime());
 	    	String id = currentTime + "-" + uuid.toString();
 
