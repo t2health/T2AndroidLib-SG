@@ -90,7 +90,10 @@ public class DataOutHandler {
 	private static final String TAG = "BFDemo";	
 
 //	private static final String COUCHBASE_URL = "http://gap.t2health.org/and/phpWebservice/webservice2.php";	 
-	private static final String COUCHBASE_URL = "http://gap.t2health.org/and/json.php";	 
+	//private static final String COUCHBASE_URL = "http://gap.t2health.org/and/json.php";	 
+	private static final String COUCHBASE_URL = "http://ec2-50-112-197-66.us-west-2.compute.amazonaws.com/mongo/json.php";
+	
+	
 	
 	private static final int LOG_FORMAT_JSON = 1;	
 	private static final int LOG_FORMAT_FLAT = 2;	
