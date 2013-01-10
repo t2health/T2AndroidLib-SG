@@ -244,7 +244,15 @@ public class DataOutHandler {
 	public void initializeDatabase(String databaseName, String designDocName, String designDocId, String viewName, String remoteDatabase) {
 
 		mDatabaseEnabled = true;
-		mRemoteDatabase = remoteDatabase;
+		
+		if (mRemoteDatabase.equalsIgnoreCase("")) {
+			mRemoteDatabase = COUCHBASE_URL;			
+		}
+		else {
+			mRemoteDatabase = remoteDatabase;
+		}
+		
+		
 		mDatabaseName = databaseName;
 		
 		Log.v(TAG, "Initializing T2 database dispatcher");
@@ -813,7 +821,7 @@ public class DataOutHandler {
 								Log.d(TAG, "Sending " + mPostingQueue.size() + " entries");
 //								Log.d(TAG, "Actual postingstring: " + jsonString);
 								RequestParams params = new RequestParams("json", jsonString);
-						        T2RestClient.post(COUCHBASE_URL, params, new AsyncHttpResponseHandler() {
+						        T2RestClient.post(mRemoteDatabase, params, new AsyncHttpResponseHandler() {
 						            @Override
 						            public void onSuccess(String response) {
 										Log.d(TAG, "Posing Successful: " + response);
