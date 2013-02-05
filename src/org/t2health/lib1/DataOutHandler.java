@@ -245,11 +245,13 @@ public class DataOutHandler {
 
 		mDatabaseEnabled = true;
 		
-		if (mRemoteDatabase.equalsIgnoreCase("")) {
-			mRemoteDatabase = COUCHBASE_URL;			
-		}
-		else {
-			mRemoteDatabase = remoteDatabase;
+		if (remoteDatabase != null ) {
+			if (remoteDatabase.equalsIgnoreCase("")) {
+				mRemoteDatabase = COUCHBASE_URL;			
+			}
+			else {
+				mRemoteDatabase = remoteDatabase;
+			}
 		}
 		
 		
