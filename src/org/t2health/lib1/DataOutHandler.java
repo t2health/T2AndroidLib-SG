@@ -137,6 +137,8 @@ public class DataOutHandler {
 	public static final String HRV_FFT = "HRVFFT";					// FFT of IBI
 	public static final String HRV_RAW_SDNN = "SDNN";				// SDNN
 	public static final String NOTE = "note";
+	public static final String AIRFLOW = "AIRFLOW";
+	public static final String SPO2 = "SPO2";
 
 	public static final String DATA_TYPE_RATING = "RatingData";
 	public static final String DATA_TYPE_INTERNAL_SENSOR = "InternalSensor";
