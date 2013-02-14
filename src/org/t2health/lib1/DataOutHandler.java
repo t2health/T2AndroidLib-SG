@@ -54,16 +54,26 @@ import org.t2health.lib1.LogWriter;
 //import com.couchbase.touchdb.TDServer;
 //import com.couchbase.touchdb.router.TDURLStreamHandlerFactory;
 
+//import com.example.h2authtest.SecuredActivity.H2PostTask;
 import com.loopj.android.http.AsyncHttpResponseHandler;
 import com.loopj.android.http.RequestParams;
+//import com.t2.R;
+//import com.t2.compassionMeditation.LoginActivity;
+import com.t2auth.AuthUtils;
+import com.t2auth.AuthUtils.H2PostEntryTask;
+import com.t2auth.AuthUtils.T2LogoutTask;
+import com.t2auth.AuthUtils.T2ServiceTicketTask;
 
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.preference.PreferenceManager;
 import android.util.Log;
+import android.view.View;
 
 
 
@@ -165,11 +175,6 @@ public class DataOutHandler {
 	List<T2RestPacket> mPendingQueue;
 
 	/**
-	 * Queue for Rest packets which have been send via HTTP
-	 */
-	List<T2RestPacket> mPostingQueue;
-
-	/**
 	 * Thread used to communicate messages in mPendingQueue to server
 	 */
 	private DispatchThread mDispatchThread = null;	
@@ -181,6 +186,11 @@ public class DataOutHandler {
 	 * Application version info determined by the package manager
 	 */
 	private String mApplicationVersion = "";
+
+    private T2ServiceTicketTask mServiceTicketTask = null;
+    private H2PostEntryTask mPostEntryTask = null;
+    
+	
 	
 //    //static inializer to ensure that touchdb:// URLs are handled properly
 //    {
@@ -254,16 +264,16 @@ public class DataOutHandler {
 			}
 		}
 		
-		
 		mDatabaseName = databaseName;
 		
-		Log.v(TAG, "Initializing T2 database dispatcher");
+		String tgt = AuthUtils.getTicketGrantingTicket(mContext);
+		Log.d(TAG, "Ticket granting ticket = " + tgt);
+		Log.d(TAG, "Initializing T2 database dispatcher");
+		Log.d(TAG, "Remote database name = " + remoteDatabase);
 		mPendingQueue = new ArrayList<T2RestPacket>();		
-		mPostingQueue = new ArrayList<T2RestPacket>();
 		
 		mDispatchThread = new DispatchThread();
 		mDispatchThread.start();		
-		
 
 //		Log.v(TAG, "starting TouchBase");
 //
@@ -489,7 +499,6 @@ public class DataOutHandler {
 	public void close() {
 
 		Log.e(TAG, " ***********************************closing ******************************");
-		mDatabaseEnabled = false;
 		if (mLoggingEnabled) {
 			if (mLogFormat == LOG_FORMAT_JSON) {
 				mLogWriter.write("],}");
@@ -512,9 +521,6 @@ public class DataOutHandler {
 			mDispatchThread.interrupt();
 			mDispatchThread = null;
 		}
-		
-		
-		
 	}
 
 	/**
@@ -811,18 +817,26 @@ public class DataOutHandler {
 										 jsonString += packet.mJson;
 										 
 									 Log.d(TAG, "Posting document " + packet.mId);
-									 mPostingQueue.add(packet);									 
-									
 								}
 							}
 							
 							jsonString += "]";
 							
-							// If there is somethig in the postingQueue then send it http
-							if (mPostingQueue.size() > 0) {
-								Log.d(TAG, "Sending " + mPostingQueue.size() + " entries");
-//								Log.d(TAG, "Actual postingstring: " + jsonString);
+							
+							
+							// Determine how we are going to send this packet
+							// If there is a ticket granting ticked then we will send to the 
+							// CAS server, otherwise send to our normal server
+							String tgt = AuthUtils.getTicketGrantingTicket(mContext);
+//							if (tgt == null) {
+
+							// Until we get the CAS server rest server working properly send all data to our handler
+							if (true) {
+								
+								// No ticket granting ticket, just send to original server
 								RequestParams params = new RequestParams("json", jsonString);
+								Log.d(TAG, "Sending to: " + mRemoteDatabase);
+								
 						        T2RestClient.post(mRemoteDatabase, params, new AsyncHttpResponseHandler() {
 						            @Override
 						            public void onSuccess(String response) {
@@ -830,41 +844,24 @@ public class DataOutHandler {
 						                
 						            }
 						        });	
-						        mPostingQueue.clear();
 							}
-					        
-							// For now we'll just clear out the pending queue too.
-							// Eventually we should check responses against the pending queue and delete entries only when we get a successful response 
-							mPendingQueue.clear();
+							else {
+								
+//								String dummy = "{'RECORDED_TIME':" + System.currentTimeMillis() + ", 'APPDATA':{" +
+//			                    		"'user_id': '" + "scott"  + "', " +
+//			                    		"'_id':'" + UUID.randomUUID().toString() + "'}}";
+//								sendViaCas(dummy);
+								
+								sendViaCas(jsonString);
+							}
 							
-//					        // Now remove entries in posting queue from pending queue
-//							Iterator<T2RestPacket> iterator1 = mPostingQueue.iterator();						
-//							while(iterator1.hasNext()) {
-//								T2RestPacket packet = iterator.next();
-//								mPendingQueue.remove(packet);
-//								Log.d(TAG, "Removing document " + packet.mId);
-//							}					        
-//					        
 					        
-					        
-					        
-														
+							mPendingQueue.clear();
 						} // End if (mPendingQueue.size() > 0)
 						
 					} // End synchronized(mPendingQueue) 
 				}
-				
-				
-				
-				
-				
-				
-
-				
-				
-				
 			} // End while(true)
-			
 
 			isRunning = false;
 		} // End public void run() 
@@ -896,5 +893,59 @@ public class DataOutHandler {
         return false;
     } 	
 	
-	
+	private void sendViaCas(final String entry) {
+
+		Log.d(TAG, "Sending via cas:  " + entry);
+
+        if (mServiceTicketTask != null) {
+            return;
+        }
+		
+		// First we need to get a service ticket, then do the actual send
+		mServiceTicketTask = new T2ServiceTicketTask(AuthUtils.APPLICATION_NAME,
+                AuthUtils.getTicketGrantingTicket(mContext),
+                AuthUtils.getSslContext(mContext).getSocketFactory()) {
+            @Override
+            protected void onTicketRequestSuccess(String serviceTicket) {
+                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mContext);
+                prefs.edit().putString(mContext.getString(R.string.pref_st), serviceTicket).commit();
+
+                mServiceTicketTask = null;
+				Log.d(TAG, "TicketRequest Success: ");
+
+                mPostEntryTask = new H2PostEntryTask(AuthUtils.getServiceTicket(mContext), entry) {
+
+					@Override
+					protected void onPostSuccess(String response) {
+						Log.d(TAG, "Posing Successful: " + response);
+						
+					}
+
+					@Override
+					protected void onPostFailed() {
+						
+					}
+                	
+                };                
+                mPostEntryTask.execute((Void) null);
+                
+                
+            }
+
+            @Override
+            protected void onTicketRequestFailed() {
+                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mContext);
+                prefs.edit().remove(mContext.getString(R.string.pref_tgt)).commit();
+                
+                mServiceTicketTask = null;
+            }
+
+            @Override
+            protected void onCancelled() {
+                super.onCancelled();
+                mServiceTicketTask = null;
+            }
+        };
+        mServiceTicketTask.execute((Void) null);		
+	}
 }

@@ -59,4 +59,10 @@
    <string name="cadenceUnits">\u0020str/min</string>
    <string name="weightUnits">\u0020Kg</string>    
 
+    <!-- Strings related to login - authentication -->
+    <string name="pref_tgt">pref_tgt</string>
+    <string name="pref_st">pref_st</string>
+    <string name="pref_last_user">pref_last_user</string>   
+   
+   
 </resources>
