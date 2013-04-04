@@ -3,6 +3,8 @@
       package="org.t2health.lib1"
       android:versionCode="1"
       android:versionName="1.0">
+    <uses-sdk android:minSdkVersion="7" />
+    
         <activity 
         	android:theme="@android:style/Theme.Light"
         	android:name=".filechooser.FileChooser" 
