@@ -35,11 +35,13 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.GregorianCalendar;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
 import java.util.UUID;
+import java.util.Vector;
 
 import org.codehaus.jackson.node.ArrayNode;
 import org.codehaus.jackson.node.JsonNodeFactory;
@@ -54,15 +56,21 @@ import org.t2health.lib1.LogWriter;
 //import com.couchbase.touchdb.TDServer;
 //import com.couchbase.touchdb.router.TDURLStreamHandlerFactory;
 
-//import com.example.h2authtest.SecuredActivity.H2PostTask;
+import com.amazonaws.AmazonServiceException;
+import com.t2.aws.Constants;
+import com.t2.aws.DynamoDBManager;
+import com.t2.aws.PropertyLoader;
+import com.amazonaws.services.dynamodb.AmazonDynamoDBClient;
+import com.amazonaws.services.dynamodb.model.AttributeValue;
+import com.amazonaws.services.dynamodb.model.PutItemRequest;
+import com.amazonaws.tvmclient.AmazonClientManager;
 import com.loopj.android.http.AsyncHttpResponseHandler;
 import com.loopj.android.http.RequestParams;
-//import com.t2.R;
-//import com.t2.compassionMeditation.LoginActivity;
-import com.t2auth.AuthUtils;
-import com.t2auth.AuthUtils.H2PostEntryTask;
-import com.t2auth.AuthUtils.T2LogoutTask;
-import com.t2auth.AuthUtils.T2ServiceTicketTask;
+
+//import com.t2auth.AuthUtils;
+//import com.t2auth.AuthUtils.H2PostEntryTask;
+//import com.t2auth.AuthUtils.T2LogoutTask;
+//import com.t2auth.AuthUtils.T2ServiceTicketTask;
 
 
 import android.content.Context;
@@ -71,6 +79,8 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.os.AsyncTask;
+import android.os.Build;
 import android.preference.PreferenceManager;
 import android.util.Log;
 import android.view.View;
@@ -99,9 +109,10 @@ import android.view.View;
 public class DataOutHandler {
 	private static final String TAG = "BFDemo";	
 
-//	private static final String COUCHBASE_URL = "http://gap.t2health.org/and/phpWebservice/webservice2.php";	 
-	//private static final String COUCHBASE_URL = "http://gap.t2health.org/and/json.php";	 
-	private static final String COUCHBASE_URL = "http://ec2-50-112-197-66.us-west-2.compute.amazonaws.com/mongo/json.php";
+	//	private static final String DEFAULT_REST_DB_URL = "http://gap.t2health.org/and/phpWebservice/webservice2.php";	 
+	//private static final String DEFAULT_REST_DB_URL = "http://gap.t2health.org/and/json.php";	 
+	private static final String DEFAULT_REST_DB_URL = "http://ec2-50-112-197-66.us-west-2.compute.amazonaws.com/mongo/json.php";
+	private static final String DEFAULT_AWS_DB_URL = "h2tvm.elasticbeanstalk.com";
 	
 	
 	
@@ -159,17 +170,6 @@ public class DataOutHandler {
 	private long mSessionId;
 //	private int mLogFormat = LOG_FORMAT_FLAT;	
 	
-//	//couch internals
-//	protected static TDServer server;
-//	protected static HttpClient httpClient;
-//
-//	//ektorp impl
-//	protected CouchDbInstance dbInstance;
-//	protected CouchDbConnector couchDbConnector;
-//	protected ReplicationCommand pushReplicationCommand;
-//	protected ReplicationCommand pullReplicationCommand;
-	
-	String mDatabaseName;	
 	String mRemoteDatabase;
 	/**
 	 * Queue for Rest packets waiting to be sent via HTTP
@@ -189,16 +189,16 @@ public class DataOutHandler {
 	 */
 	private String mApplicationVersion = "";
 
-    private T2ServiceTicketTask mServiceTicketTask = null;
-    private H2PostEntryTask mPostEntryTask = null;
+//    private T2ServiceTicketTask mServiceTicketTask = null;
+//    private H2PostEntryTask mPostEntryTask = null;
     
+	public static AmazonClientManager clientManager = null;		
+
+	private final static int DATABASE_TYPE_AWS = 0;
+	private final static int DATABASE_TYPE_T2_REST = 1;
 	
 	
-//    //static inializer to ensure that touchdb:// URLs are handled properly
-//    {
-//        TDURLStreamHandlerFactory.registerSelfIgnoreError();
-//    }	
-	
+	private int mDatabaseType = DATABASE_TYPE_AWS; // Default to AWS
 	
 	/**
 	 * Constructor. Initializes context and user/session parameters
@@ -242,7 +242,28 @@ public class DataOutHandler {
 	}
 	
 	
-				
+			
+	class CheckTableStatusTask extends AsyncTask<String, Void, String> {
+
+	    private Exception exception;
+
+	    protected String doInBackground(String... urls) {
+	        try {
+				String tableStatus = DynamoDBManager.getTestTableStatus();
+				String status = tableStatus;
+	        	
+	            return status;
+	        } catch (Exception e) {
+	            this.exception = e;
+	            return "";
+	        }
+	    }
+
+	    protected void onPostExecute(String status) {
+	    	Log.d(TAG, "Database status = " + status);
+	    }
+	 }	
+	
 
 	
 	/**
@@ -257,197 +278,61 @@ public class DataOutHandler {
 
 		mDatabaseEnabled = true;
 		
-		if (remoteDatabase != null ) {
-			if (remoteDatabase.equalsIgnoreCase("")) {
-				mRemoteDatabase = COUCHBASE_URL;			
+		
+		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mContext);
+		String sDatabaseType = prefs.getString("external_database_type", "AWS");
+		if (sDatabaseType.equalsIgnoreCase("AWS"))
+			mDatabaseType = DATABASE_TYPE_AWS;
+		else
+			mDatabaseType = DATABASE_TYPE_T2_REST;
+
+
+		switch (mDatabaseType) {
+		default:
+		case DATABASE_TYPE_AWS:
+			Log.d(TAG, "Using AWS Database type");
+			if (remoteDatabase != null ) {
+				if (remoteDatabase.equalsIgnoreCase("")) {
+					mRemoteDatabase = DEFAULT_AWS_DB_URL;			
+				}
+				else {
+					mRemoteDatabase = remoteDatabase;
+				}
 			}
-			else {
-				mRemoteDatabase = remoteDatabase;
+			break;
+		
+		case DATABASE_TYPE_T2_REST:
+			Log.d(TAG, "Using T2 Rest Database type");
+			if (remoteDatabase != null ) {
+				if (remoteDatabase.equalsIgnoreCase("")) {
+					mRemoteDatabase = DEFAULT_REST_DB_URL;			
+				}
+				else {
+					mRemoteDatabase = remoteDatabase;
+				}
 			}
+			break;
+		
 		}
 		
-		mDatabaseName = databaseName;
 		
-		String tgt = AuthUtils.getTicketGrantingTicket(mContext);
-		Log.d(TAG, "Ticket granting ticket = " + tgt);
 		Log.d(TAG, "Initializing T2 database dispatcher");
-		Log.d(TAG, "Remote database name = " + remoteDatabase);
+		Log.d(TAG, "Remote database name = " + mRemoteDatabase);
 		mPendingQueue = new ArrayList<T2RestPacket>();		
 		
 		mDispatchThread = new DispatchThread();
 		mDispatchThread.start();		
+		
 
-//		Log.v(TAG, "starting TouchBase");
-//
-//		// Start TouchDB
-//		String filesDir = mContext.getFilesDir().getAbsolutePath();
-//	    try {
-//            server = new TDServer(filesDir);
-//        } catch (IOException e) {
-//            Log.e(TAG, "Error starting TDServer", e);
-//        }		
-//		
-//	    //install a view definition needed by the application
-//	    TDDatabase db = server.getDatabaseNamed(mDatabaseName);
-//	    
-//	    
-//	    TDView view = db.getViewNamed(String.format("%s/%s", designDocName, viewName));
-//	    view.setMapReduceBlocks(new TDViewMapBlock() {
-//
-//            @Override
-//            public void map(Map<String, Object> document, TDViewMapEmitBlock emitter) {
-//                Object createdAt = document.get("created_at");
-//                if(createdAt != null) {
-//                    emitter.emit(createdAt.toString(), document);
-//                }
-//            }
-//        }, null, "1.0");  
-//	    
-//	    // Start ektorp
-//		Log.v(TAG, "starting TouchBase ektorp");
-//
-//		if(httpClient != null) {
-//			httpClient.shutdown();
-//		}
-//
-//		httpClient = new TouchDBHttpClient(server);
-//		dbInstance = new StdCouchDbInstance(httpClient);	    
-//
-//		T2EktorpAsyncTask startupTask = new T2EktorpAsyncTask() {
-//
-//			@Override
-//			protected void doInBackground() {
-//				couchDbConnector = dbInstance.createConnector(mDatabaseName, true);
-//				Log.v(TAG, "TouchBase Created");
-//				
-//			}
-//
-//			@Override
-//			protected void onSuccess() {
-//				// These need to be started manually now
-//				//startReplications();
-//				startPushReplications();				
-//			}
-//		};
-//		startupTask.execute();
+		if (mDatabaseType == DATABASE_TYPE_AWS) {
+			// Create AmazonClientManager with SharedPreference
+			clientManager = new AmazonClientManager(mContext.getSharedPreferences(
+					"com.amazon.aws.demo.AWSDemo", Context.MODE_PRIVATE), mRemoteDatabase);	
+			
+			//new CheckTableStatusTask().execute("");
+		}
 	}		
 
-//	public void startPushReplications() {
-//		pushReplicationCommand = new ReplicationCommand.Builder()
-//		.source(mDatabaseName)
-//		.target(mRemoteDatabase)
-//		.createTarget(true)
-////		.createTarget(false)
-//		.continuous(true)
-//		.build();
-//
-//		T2EktorpAsyncTask pushReplication = new T2EktorpAsyncTask() {
-//	
-//			@Override
-//			protected void doInBackground() {
-//				dbInstance.replicate(pushReplicationCommand);
-//			}
-//		};
-//	
-//		pushReplication.execute();		
-//	}	
-//	public void startPullReplications() {
-//		pullReplicationCommand = new ReplicationCommand.Builder()
-//		.source(mRemoteDatabase)
-//		.target(mDatabaseName)
-//		.continuous(true)
-//		.build();
-//
-//		T2EktorpAsyncTask pullReplication = new T2EktorpAsyncTask() {
-//	
-//			@Override
-//			protected void doInBackground() {
-//				dbInstance.replicate(pullReplicationCommand);
-//			}
-//		};
-//	
-//		pullReplication.execute();		
-//	}	
-//
-//	public void stopPushReplications() {
-//		pushReplicationCommand = new ReplicationCommand.Builder()
-//		.source(mDatabaseName)
-//		.target(mRemoteDatabase)
-//		.cancel(true)
-//		.build();
-//
-//		T2EktorpAsyncTask pushReplication = new T2EktorpAsyncTask() {
-//	
-//			@Override
-//			protected void doInBackground() {
-//				dbInstance.replicate(pushReplicationCommand);
-//			}
-//		};
-//	
-//		pushReplication.execute();			
-//	}	
-//	
-//	
-//	public void stopPullReplications() {
-//		pullReplicationCommand = new ReplicationCommand.Builder()
-//		.source(mRemoteDatabase)
-//		.target(mDatabaseName)
-//		.cancel(true)
-//		.build();
-//
-//		T2EktorpAsyncTask pullReplication = new T2EktorpAsyncTask() {
-//	
-//			@Override
-//			protected void doInBackground() {
-//				dbInstance.replicate(pullReplicationCommand);
-//			}
-//		};
-//	
-//		pullReplication.execute();			
-//	}	
-//	
-//	public void startReplications() {
-//		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mContext);
-//	
-//		pushReplicationCommand = new ReplicationCommand.Builder()
-//			.source(mDatabaseName)
-//			.target(mRemoteDatabase)
-////			.createTarget(true)
-//			
-//			.continuous(true)
-//			.build();
-//	
-//		T2EktorpAsyncTask pushReplication = new T2EktorpAsyncTask() {
-//	
-//			@Override
-//			protected void doInBackground() {
-//				dbInstance.replicate(pushReplicationCommand);
-//			}
-//		};
-//	
-//		pushReplication.execute();
-//	
-//		pullReplicationCommand = new ReplicationCommand.Builder()
-//			.source(mRemoteDatabase)
-//			.target(mDatabaseName)
-////			.createTarget(true)
-//			
-//			.continuous(true)
-//			.build();
-//	
-//		T2EktorpAsyncTask pullReplication = new T2EktorpAsyncTask() {
-//	
-//			@Override
-//			protected void doInBackground() {
-//				dbInstance.replicate(pullReplicationCommand);
-//			}
-//		};
-//	
-//		pullReplication.execute();
-//	}
-//	
-	
-	
 	public void enableLogging(Context context) {
 		try {
 			mLogWriter = new LogWriter(context);	
@@ -508,16 +393,6 @@ public class DataOutHandler {
 			mLogWriter.close();			
 		}
 		
-		//clean up our TohchDB http client connection manager
-//		if(httpClient != null) {
-//			httpClient.shutdown();
-//		}
-//
-//		//clean up our TohchDB Sever
-//		if(server != null) {
-//		    server.close();
-//		}
-		
 		if(mDispatchThread != null) {
 			mDispatchThread.cancel();
 			mDispatchThread.interrupt();
@@ -528,7 +403,7 @@ public class DataOutHandler {
 	/**
 	 * Data packet used to accumulate data to be sent using DataOutHandler
 	 * 
-	 * This class encapculates one JSON object which holds any number of related data
+	 * This class encapsulates one JSON object which holds any number of related data
 	 * 
 	 * @author scott.coleman
 	 *
@@ -537,6 +412,8 @@ public class DataOutHandler {
 		
 		public String mStr = "";
 		public ObjectNode mItem;		
+		public ObjectNode mData;		
+		HashMap<String, AttributeValue> hashMap = new HashMap<String, AttributeValue>();		
 		
 		public DataOutPacket() {
 	    	UUID uuid = UUID.randomUUID();
@@ -553,8 +430,10 @@ public class DataOutHandler {
 				mStr = TIME_STAMP + ",";			
 			}
 			
+	    	mData = JsonNodeFactory.instance.objectNode();		
 	    	mItem = JsonNodeFactory.instance.objectNode();		
-	    	mItem.put("_id", id);
+	    	mItem.put("record_id", id);
+	    	mItem.put("time_stamp", currentTime);
 	    	mItem.put("created_at", currentTimeString);
 	    	mItem.put("user_id", mUserId);
 	    	mItem.put("session_date", mSessionDate);
@@ -563,9 +442,44 @@ public class DataOutHandler {
 	    	}
 	    	mItem.put("app_name", mAppName);
 	    	mItem.put("data_type", mDataType);
-	    	mItem.put("platform", "Android");
+	    	mItem.put("platform", "Android");		    	
+	    	mItem.put("platform_version", Build.VERSION.RELEASE);		    	
+	    	
+			if (mDatabaseType == DATABASE_TYPE_AWS) {
+
+				HashMap<String, AttributeValue> hashMap = new HashMap<String, AttributeValue>();
+		    	
+		    	addAttributeWithS("record_id", id);
+		    	addAttributeWithS("time_stamp",String.valueOf(currentTime) );
+		    	addAttributeWithS("created_at",currentTimeString );
+		    	addAttributeWithS("user_id", mUserId);
+		    	addAttributeWithS("session_date", mSessionDate);
+		    	addAttributeWithS("session_id", String.valueOf(mSessionId));
+		    	addAttributeWithS("app_name", mAppName);
+		    	addAttributeWithS("data_type", mDataType);
+		    	addAttributeWithS("platform", "Android");
+		    	addAttributeWithS("platform_version", Build.VERSION.RELEASE);
+			}
 		}
 
+		void addAttributeWithS(String identifier, String attrVal) {
+			
+			if (attrVal.equalsIgnoreCase(""))
+				return;
+				
+			AttributeValue attr = new AttributeValue().withS(attrVal);	
+			hashMap.put(identifier, attr);			
+		}
+		
+		void addAttributeWithSS(String identifier, Vector attrVal) {
+			
+			if (attrVal.size()== 0)
+				return;
+				
+			AttributeValue attr = new AttributeValue().withSS(attrVal);	
+			hashMap.put(identifier, attr);			
+		}		
+		
 		/**
 		 * Adds a tag/data pair to the packet
 		 * @param tag
@@ -580,7 +494,10 @@ public class DataOutHandler {
 				mStr += "" + value + ",";			
 			}
 			
-			mItem.put(tag,value);		
+			mItem.put(tag,value);	
+			if (mDatabaseType == DATABASE_TYPE_AWS) {
+		    	addAttributeWithS(tag, String.valueOf(value));
+			}			
 		}
 		
 		/**
@@ -596,7 +513,11 @@ public class DataOutHandler {
 			else {
 				mStr += "" + value + ",";			
 			}
-			mItem.put(tag,value);		
+			mItem.put(tag,value);	
+			if (mDatabaseType == DATABASE_TYPE_AWS) {
+		    	addAttributeWithS(tag, String.valueOf(value));
+			}			
+				
 		}
 		
 		/**
@@ -611,7 +532,11 @@ public class DataOutHandler {
 			else {
 				mStr += "" + value + ",";			
 			}
-			mItem.put(tag,value);		
+			mItem.put(tag,value);	
+			if (mDatabaseType == DATABASE_TYPE_AWS) {
+		    	addAttributeWithS(tag, String.valueOf(value));
+			}			
+				
 		}
 
 		/**
@@ -626,7 +551,11 @@ public class DataOutHandler {
 			else {
 				mStr += "" + value + ",";			
 			}
-			mItem.put(tag,value);		
+			mItem.put(tag,value);
+			if (mDatabaseType == DATABASE_TYPE_AWS) {
+		    	addAttributeWithS(tag, String.valueOf(value));
+			}			
+					
 		}
 
 		/**
@@ -641,24 +570,50 @@ public class DataOutHandler {
 			else {
 				mStr += "" + value + ",";			
 			}
-			mItem.put(tag,value);		
+			mItem.put(tag,value);	
+			if (mDatabaseType == DATABASE_TYPE_AWS) {
+		    	addAttributeWithS(tag, String.valueOf(value));
+			}			
+				
 		}
+		
+		
+		public void add(String tag, Vector values) {
+			if (mLogFormat == LOG_FORMAT_JSON) {
+				mStr += tag + ":\"" + values.toString() + "\",";			
+			}
+			else {
+				mStr += "" + values.toString() + ",";			
+			}
+			mItem.put(tag,values.toString());	
+			if (mDatabaseType == DATABASE_TYPE_AWS) {
+				addAttributeWithSS(tag, values);
+			}			
+				
+		}
+		
+		public String toString() {
+			return mStr;
+		}
+		
 	}
 
-	public void handleDataOut(final JSONObject jsonObject) {
-
-		DataOutPacket packet = new DataOutPacket();
-		// To match our format we must remove the starting and ending curly brace
-		String tmp = jsonObject.toString();
-		tmp = tmp.substring(1,tmp.length() - 1);
-		packet.mStr += tmp;
-		
-		//packet.mItem.put("data", jsonObject.toString());
-//		packet.mItem.putObject(jsonObject);
-		
-		handleDataOut(packet);
-	}	
-	
+//	// This one uses Android JSON objects - no longer used
+//	public void handleDataOut(final JSONObject jsonObject) {
+//		/// TODO - THis is broken!
+//		DataOutPacket packet = new DataOutPacket();
+//		// To match our format we must remove the starting and ending curly brace
+//		String tmp = jsonObject.toString();
+//		tmp = tmp.substring(1,tmp.length() - 1);
+//		packet.mStr += tmp;
+//		
+//		//packet.mItem.put("data", jsonObject.toString());
+////		packet.mItem.putObject(jsonObject);
+//		
+//		handleDataOut(packet);
+//	}	
+//	
+	// This one uses Android Jackson JSON objects
 	public void handleDataOut(final ObjectNode jsonObject) {
 		DataOutPacket packet = new DataOutPacket();
 		// To match our format we must remove the starting and ending curly brace
@@ -666,7 +621,7 @@ public class DataOutHandler {
 		tmp = tmp.substring(1,tmp.length() - 1);
 		packet.mStr += tmp;
 		
-		packet.mItem.put("data", jsonObject);
+		packet.mData.put("data", jsonObject);
 		
 		handleDataOut(packet);
 	}
@@ -680,7 +635,7 @@ public class DataOutHandler {
 		tmp = tmp.substring(1,tmp.length() - 1);
 		packet.mStr += tmp;
 		
-		packet.mItem.put("data", jsonArray);
+		packet.mData.put("data", jsonArray);
 		handleDataOut(packet);
 	}	
 	
@@ -692,12 +647,16 @@ public class DataOutHandler {
 	 * @param packet - data Packet to send to output sinks
 	 */
 	public void handleDataOut(final DataOutPacket packet) {
+
+		
+		//packet.mItem.put("data", packet.mData);		
+		
+		
 		if (mLogFormat == LOG_FORMAT_JSON) {
 			packet.mStr += "},";
 		}
 
 		if (mLoggingEnabled) {	
-//			Log.d(TAG, "Writing to log file");		// TODO: remove
 			mLogWriter.write(packet.mStr);
 		}
 
@@ -707,10 +666,10 @@ public class DataOutHandler {
 		
 		if (mDatabaseEnabled) {
 			String dataPacketString = packet.mItem.toString();
-			T2RestPacket pkt = new T2RestPacket(dataPacketString);
-			Log.d(TAG, "Queueing document " + pkt.mId);
-	    
+			T2RestPacket pkt = new T2RestPacket(dataPacketString, packet.hashMap);
+//			T2RestPacket pkt = new T2RestPacket(dataPacketString);
 			
+			Log.d(TAG, "Queueing document " + pkt.mId);
 			
 			
 //			String jsonString = "[" + dataPacketString + "]";
@@ -724,39 +683,10 @@ public class DataOutHandler {
 //	        });
 
 			
-			
-			
 			synchronized(mPendingQueue) {
 				mPendingQueue.add(0,  pkt);
 			}
 		}
-		
-		
-		
-//		// Now do something with the database if necessary
-//		if (mDatabaseEnabled && couchDbConnector != null) {
-//			Log.d(TAG, "Adding document");
-//
-//			T2EktorpAsyncTask createItemTask = new T2EktorpAsyncTask() {
-//
-//				@Override
-//				protected void doInBackground() {
-//					couchDbConnector.create(packet.mItem);
-//				}
-//
-//				@Override
-//				protected void onSuccess() {
-//					Log.d(TAG, "Document added to database successfully");
-//				}
-//
-//				@Override
-//				protected void onUpdateConflict(
-//						UpdateConflictException updateConflictException) {
-//					Log.d(TAG, "Got an update conflict for: " + packet.mItem.toString());
-//				}
-//			};
-//		    createItemTask.execute();			
-//		} // End if (mDatabaseEnabled && couchDbConnector != null)
 	}
 
 	/**
@@ -809,6 +739,7 @@ public class DataOutHandler {
 							while(iterator.hasNext()) {
 								
 								T2RestPacket packet = iterator.next();
+								Log.d(TAG, "Posting document " + packet.mId);
 								if (packet.mStatus == T2RestPacket.STATUS_PENDING) {
 									
 									 packet.mStatus = T2RestPacket.STATUS_POSTED;
@@ -818,45 +749,50 @@ public class DataOutHandler {
 									 else
 										 jsonString += packet.mJson;
 										 
-									 Log.d(TAG, "Posting document " + packet.mId);
+								}
+								
+								if (mDatabaseType == DATABASE_TYPE_AWS) {
+									AmazonDynamoDBClient ddb = DataOutHandler.clientManager
+											.ddb();
+									try {
+										
+										PutItemRequest request = new PutItemRequest().withTableName(
+												PropertyLoader.getInstance().getTestTableName())
+												.withItem(packet.hashMap);
+
+										ddb.putItem(request);
+										Log.d(TAG, "AWS Posting Successful: ");
+										
+									} catch (AmazonServiceException ex) {
+										DataOutHandler.clientManager
+												.wipeCredentialsOnAuthError(ex);
+										Log.d(TAG, "Error posting document " + ex.toString());
+									}	
+									catch (Exception ex) {
+										DataOutHandler.clientManager.clearCredentials();
+										Log.d(TAG, "Error posting document " + ex.toString());
+									}									
 								}
 							}
 							
 							jsonString += "]";
 							
-							
-							
-							// Determine how we are going to send this packet
-							// If there is a ticket granting ticked then we will send to the 
-							// CAS server, otherwise send to our normal server
-							String tgt = AuthUtils.getTicketGrantingTicket(mContext);
-//							if (tgt == null) {
-
-							// Until we get the CAS server rest server working properly send all data to our handler
-							if (true) {
-								
-								// No ticket granting ticket, just send to original server
+							if (mDatabaseType == DATABASE_TYPE_T2_REST) {
 								RequestParams params = new RequestParams("json", jsonString);
 								Log.d(TAG, "Sending to: " + mRemoteDatabase);
 								
 						        T2RestClient.post(mRemoteDatabase, params, new AsyncHttpResponseHandler() {
 						            @Override
 						            public void onSuccess(String response) {
-										Log.d(TAG, "Posing Successful: " + response);
+										Log.d(TAG, "T2Rest Posting Successful: " + response);
 						                
 						            }
 						        });	
-							}
-							else {
-								
-//								String dummy = "{'RECORDED_TIME':" + System.currentTimeMillis() + ", 'APPDATA':{" +
-//			                    		"'user_id': '" + "scott"  + "', " +
-//			                    		"'_id':'" + UUID.randomUUID().toString() + "'}}";
-//								sendViaCas(dummy);
-								
-								sendViaCas(jsonString);
-							}
-							
+							}							
+
+//							if (databaseType == DatabaseType.T2_CAS) {
+//								sendViaCas(jsonString);
+//							}							
 					        
 							mPendingQueue.clear();
 						} // End if (mPendingQueue.size() > 0)
@@ -868,8 +804,6 @@ public class DataOutHandler {
 			isRunning = false;
 		} // End public void run() 
 		
-		
-		
 		public void cancel() {
 			this.cancelled = true;
 			Log.e(TAG, "Cancelled");
@@ -879,8 +813,6 @@ public class DataOutHandler {
 		public boolean isRunning() {
 			return this.isRunning;
 		}
-		
-		
 	}
 	
     public boolean isNetworkAvailable() {
@@ -895,59 +827,57 @@ public class DataOutHandler {
         return false;
     } 	
 	
-	private void sendViaCas(final String entry) {
-
-		Log.d(TAG, "Sending via cas:  " + entry);
-
-        if (mServiceTicketTask != null) {
-            return;
-        }
-		
-		// First we need to get a service ticket, then do the actual send
-		mServiceTicketTask = new T2ServiceTicketTask(AuthUtils.APPLICATION_NAME,
-                AuthUtils.getTicketGrantingTicket(mContext),
-                AuthUtils.getSslContext(mContext).getSocketFactory()) {
-            @Override
-            protected void onTicketRequestSuccess(String serviceTicket) {
-                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mContext);
-                prefs.edit().putString(mContext.getString(R.string.pref_st), serviceTicket).commit();
-
-                mServiceTicketTask = null;
-				Log.d(TAG, "TicketRequest Success: ");
-
-                mPostEntryTask = new H2PostEntryTask(AuthUtils.getServiceTicket(mContext), entry) {
-
-					@Override
-					protected void onPostSuccess(String response) {
-						Log.d(TAG, "Posing Successful: " + response);
-						
-					}
-
-					@Override
-					protected void onPostFailed() {
-						
-					}
-                	
-                };                
-                mPostEntryTask.execute((Void) null);
-                
-                
-            }
-
-            @Override
-            protected void onTicketRequestFailed() {
-                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mContext);
-                prefs.edit().remove(mContext.getString(R.string.pref_tgt)).commit();
-                
-                mServiceTicketTask = null;
-            }
-
-            @Override
-            protected void onCancelled() {
-                super.onCancelled();
-                mServiceTicketTask = null;
-            }
-        };
-        mServiceTicketTask.execute((Void) null);		
-	}
+//	private void sendViaCas(final String entry) {
+//
+//		Log.d(TAG, "Sending via cas:  " + entry);
+//
+//        if (mServiceTicketTask != null) {
+//            return;
+//        }
+//		
+//		// First we need to get a service ticket, then do the actual send
+//		mServiceTicketTask = new T2ServiceTicketTask(AuthUtils.APPLICATION_NAME,
+//                AuthUtils.getTicketGrantingTicket(mContext),
+//                AuthUtils.getSslContext(mContext).getSocketFactory()) {
+//            @Override
+//            protected void onTicketRequestSuccess(String serviceTicket) {
+//                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mContext);
+//                prefs.edit().putString(mContext.getString(R.string.pref_st), serviceTicket).commit();
+//
+//                mServiceTicketTask = null;
+//				Log.d(TAG, "TicketRequest Success: ");
+//
+//                mPostEntryTask = new H2PostEntryTask(AuthUtils.getServiceTicket(mContext), entry) {
+//
+//					@Override
+//					protected void onPostSuccess(String response) {
+//						Log.d(TAG, "Posting Successful: " + response);
+//						
+//					}
+//
+//					@Override
+//					protected void onPostFailed() {
+//						
+//					}
+//                	
+//                };                
+//                mPostEntryTask.execute((Void) null);
+//            }
+//
+//            @Override
+//            protected void onTicketRequestFailed() {
+//                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mContext);
+//                prefs.edit().remove(mContext.getString(R.string.pref_tgt)).commit();
+//                
+//                mServiceTicketTask = null;
+//            }
+//
+//            @Override
+//            protected void onCancelled() {
+//                super.onCancelled();
+//                mServiceTicketTask = null;
+//            }
+//        };
+//        mServiceTicketTask.execute((Void) null);		
+//	}
 }

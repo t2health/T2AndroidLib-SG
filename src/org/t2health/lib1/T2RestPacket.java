@@ -27,8 +27,11 @@
  */
 package org.t2health.lib1;
 
+import java.util.HashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import com.amazonaws.services.dynamodb.model.AttributeValue;
 
 import android.util.Log;
 
@@ -43,12 +46,27 @@ public class T2RestPacket {
 	public String mId = "nothing";
 	public String mJson;
 	public int mStatus;
+	HashMap<String, AttributeValue> hashMap = new HashMap<String, AttributeValue>();		
+	
 	
 	T2RestPacket(String json) {
 		mJson = json;
 		mStatus = STATUS_PENDING;
 		
-		 Pattern p = Pattern.compile("\"_id\":\"[0-9a-zA-Z-]*\"");
+		 Pattern p = Pattern.compile("\"record_id\":\"[0-9a-zA-Z-]*\"");
+		 Matcher m = p.matcher(json);	
+		 if (m.find()) {
+				mId = m.group(0);
+		
+		 }
+	}
+	
+	T2RestPacket(String json, HashMap<String, AttributeValue> _hashMap) {
+		mJson = json;
+		mStatus = STATUS_PENDING;
+		
+		hashMap = _hashMap;
+		 Pattern p = Pattern.compile("\"record_id\":\"[0-9a-zA-Z-]*\"");
 		 Matcher m = p.matcher(json);	
 		 if (m.find()) {
 				mId = m.group(0);
