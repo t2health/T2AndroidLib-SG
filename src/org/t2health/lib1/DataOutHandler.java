@@ -224,6 +224,8 @@ public class DataOutHandler {
 	 * @param context	- Context of calling activity
 	 * @param userId	- User ID detected by calling activity 
 	 * @param sessionDate - Session date created by the calling activity (data/time stamp)
+	 * @Param appName		- Name of calling application (for logging)
+	 * @Param dataType		- Data type (Internal or external)
 	 * @param sessionId - long session ID to be included in all packets
 	 */
 	public DataOutHandler(Context context, String userId, String sessionDate, String appName, String dataType, long sessionId) {
