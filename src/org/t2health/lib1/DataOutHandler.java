@@ -1,4 +1,4 @@
-/* T2AndroidLib for Signal Processing
+/* T2AndroidLib-SG for Signal Processing
  * 
  * Copyright © 2009-2012 United States Government as represented by 
  * the Chief Information Officer of the National Center for Telehealth 
@@ -27,9 +27,6 @@
  */
 package org.t2health.lib1;
 
-
-
-
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -49,13 +46,6 @@ import org.codehaus.jackson.node.ObjectNode;
 import org.json.JSONObject;
 import org.t2health.lib1.LogWriter;
 
-//import org.ektorp.CouchDbConnector;
-//import org.ektorp.CouchDbInstance;
-//import org.ektorp.ReplicationCommand;
-//import org.ektorp.http.HttpClient;
-//import com.couchbase.touchdb.TDServer;
-//import com.couchbase.touchdb.router.TDURLStreamHandlerFactory;
-
 import com.amazonaws.AmazonServiceException;
 import com.t2.aws.Constants;
 import com.t2.aws.DynamoDBManager;
@@ -66,12 +56,6 @@ import com.amazonaws.services.dynamodb.model.PutItemRequest;
 import com.amazonaws.tvmclient.AmazonClientManager;
 import com.loopj.android.http.AsyncHttpResponseHandler;
 import com.loopj.android.http.RequestParams;
-
-//import com.t2auth.AuthUtils;
-//import com.t2auth.AuthUtils.H2PostEntryTask;
-//import com.t2auth.AuthUtils.T2LogoutTask;
-//import com.t2auth.AuthUtils.T2ServiceTicketTask;
-
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -85,15 +69,27 @@ import android.preference.PreferenceManager;
 import android.util.Log;
 import android.view.View;
 
+//T2 CAS Stuff
+//import com.t2auth.AuthUtils;
+//import com.t2auth.AuthUtils.H2PostEntryTask;
+//import com.t2auth.AuthUtils.T2LogoutTask;
+//import com.t2auth.AuthUtils.T2ServiceTicketTask;
 
+//CouchDB Stuff
+//import org.ektorp.CouchDbConnector;
+//import org.ektorp.CouchDbInstance;
+//import org.ektorp.ReplicationCommand;
+//import org.ektorp.http.HttpClient;
+//import com.couchbase.touchdb.TDServer;
+//import com.couchbase.touchdb.router.TDURLStreamHandlerFactory;
 
 /**
- * Handles distribution of processed biometric data
- *   Using DataOutHandler relieves the calling activity of the burdon of knowing
+ * Handles distribution of processed Biometric data
+ *   Using DataOutHandler relieves the calling activity of the burden of knowing
  *   where to sent it's data
  *   
- *   One of the data sinks that will be used in the future in database. Thiss class will 
- *   encapsulate all of the database particuolars from the calling activity
+ *   One of the data sinks that will be used in the future in database. This class will 
+ *   encapsulate all of the database particulars from the calling activity
  *   
  *   
  *   Currently data is stored in two formats:
@@ -101,20 +97,18 @@ import android.view.View;
  *   JSON format (mItem) for output to TouchDB
  *   
  *   Potentially these should be merged into one but right now it's 
- *   seperate because we don't want as much cluttering up log files.
+ *   separate because we don't want as much cluttering up log files.
  * 
  * @author scott.coleman
  *
  */
 public class DataOutHandler {
-	private static final String TAG = "BFDemo";	
+	private final String TAG = getClass().getName();	
 
-	//	private static final String DEFAULT_REST_DB_URL = "http://gap.t2health.org/and/phpWebservice/webservice2.php";	 
-	//private static final String DEFAULT_REST_DB_URL = "http://gap.t2health.org/and/json.php";	 
+	//private static final String DEFAULT_REST_DB_URL = "http://gap.t2health.org/and/phpWebservice/webservice2.php";	 
+	// private static final String DEFAULT_REST_DB_URL = "http://gap.t2health.org/and/json.php";	 
 	private static final String DEFAULT_REST_DB_URL = "http://ec2-50-112-197-66.us-west-2.compute.amazonaws.com/mongo/json.php";
 	private static final String DEFAULT_AWS_DB_URL = "h2tvm.elasticbeanstalk.com";
-	
-	
 	
 	private static final int LOG_FORMAT_JSON = 1;	
 	private static final int LOG_FORMAT_FLAT = 2;	
@@ -166,11 +160,14 @@ public class DataOutHandler {
 	public String mDataType = "";
 	private LogWriter mLogWriter;	
 	private Context mContext;
-	private int mLogFormat = LOG_FORMAT_JSON;	
+	private int mLogFormat = LOG_FORMAT_JSON;	// Alternatively LOG_FORMAT_FLAT 	
 	private long mSessionId;
-//	private int mLogFormat = LOG_FORMAT_FLAT;	
 	
+	/**
+	 * URL of the remote database we are saving to
+	 */
 	String mRemoteDatabase;
+
 	/**
 	 * Queue for Rest packets waiting to be sent via HTTP
 	 */
@@ -189,14 +186,20 @@ public class DataOutHandler {
 	 */
 	private String mApplicationVersion = "";
 
-//    private T2ServiceTicketTask mServiceTicketTask = null;
-//    private H2PostEntryTask mPostEntryTask = null;
+	// T2 CAS Stuff
+	//    private T2ServiceTicketTask mServiceTicketTask = null;
+	//    private H2PostEntryTask mPostEntryTask = null;
     
+	/**
+	 * Database manager when sending data to external Amazon database
+	 */
 	public static AmazonClientManager clientManager = null;		
 
+	// Right now we're only supporting two database types.
+	//	T2 Rest server (goes to Mongo DB)
+	//	AWS (Goes to AWS DynamoDB
 	private final static int DATABASE_TYPE_AWS = 0;
 	private final static int DATABASE_TYPE_T2_REST = 1;
-	
 	
 	private int mDatabaseType = DATABASE_TYPE_AWS; // Default to AWS
 	
@@ -221,7 +224,7 @@ public class DataOutHandler {
 	 * @param context	- Context of calling activity
 	 * @param userId	- User ID detected by calling activity 
 	 * @param sessionDate - Session date created by the calling activity (data/time stamp)
-	 * @param sessionId - long giveing a session ID to be included in all packets
+	 * @param sessionId - long session ID to be included in all packets
 	 */
 	public DataOutHandler(Context context, String userId, String sessionDate, String appName, String dataType, long sessionId) {
 		mAppName = appName;
@@ -241,8 +244,11 @@ public class DataOutHandler {
 		mDatabaseEnabled = true;
 	}
 	
-	
 			
+	/**
+	 * @author scott.coleman
+	 * Task to check the status of an AWS database table
+	 */
 	class CheckTableStatusTask extends AsyncTask<String, Void, String> {
 
 	    private Exception exception;
@@ -264,21 +270,23 @@ public class DataOutHandler {
 	    }
 	 }	
 	
-
-	
 	/**
-	 * Starts up TouchDB database
+	 * Initializes the current database
 	 * 
-	 * @param databaseName		- Local SQLITE database name
-	 * @param designDocName
-	 * @param designDocId
-	 * @param viewName
+	 * Note that all of the parameters (with the exception of remoteDatabase) sent to this routine are for CouchDB only.
+	 * Currently they are all N/A
+	 * 
+	 * @param databaseName		N/A Local SQLITE database name
+	 * @param designDocName		N/A Design document name
+	 * @param designDocId		N/A Design document ID
+	 * @param viewName			N/AView associated with database
+	 * @param remoteDatabase	Name of external database
 	 */
 	public void initializeDatabase(String databaseName, String designDocName, String designDocId, String viewName, String remoteDatabase) {
 
 		mDatabaseEnabled = true;
 		
-		
+		// Get chosen database from preferences
 		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mContext);
 		String sDatabaseType = prefs.getString("external_database_type", "AWS");
 		if (sDatabaseType.equalsIgnoreCase("AWS"))
@@ -286,7 +294,9 @@ public class DataOutHandler {
 		else
 			mDatabaseType = DATABASE_TYPE_T2_REST;
 
-
+		
+		// Set up mRemoteDatabase based on either remoteDatabase if it's not blank,
+		// or default values based on database type
 		switch (mDatabaseType) {
 		default:
 		case DATABASE_TYPE_AWS:
@@ -312,14 +322,12 @@ public class DataOutHandler {
 				}
 			}
 			break;
-		
 		}
 		
 		
 		Log.d(TAG, "Initializing T2 database dispatcher");
 		Log.d(TAG, "Remote database name = " + mRemoteDatabase);
 		mPendingQueue = new ArrayList<T2RestPacket>();		
-		
 		mDispatchThread = new DispatchThread();
 		mDispatchThread.start();		
 		
@@ -329,10 +337,16 @@ public class DataOutHandler {
 			clientManager = new AmazonClientManager(mContext.getSharedPreferences(
 					"com.amazon.aws.demo.AWSDemo", Context.MODE_PRIVATE), mRemoteDatabase);	
 			
+			// TBD - we should probably check the table status
 			//new CheckTableStatusTask().execute("");
 		}
 	}		
 
+	/**
+	 * @param context	Calling party's context
+	 * 
+	 *  enables logging to external log file of entries sent to the database
+	 */
 	public void enableLogging(Context context) {
 		try {
 			mLogWriter = new LogWriter(context);	
@@ -346,8 +360,6 @@ public class DataOutHandler {
 			PackageManager packageManager = context.getPackageManager();
 			PackageInfo info = packageManager.getPackageInfo(context.getPackageName(), 0);			
 			mApplicationVersion = info.versionName;
-			
-			
 			
 			if (mLogFormat == LOG_FORMAT_JSON) {
 				String preamble = String.format(
@@ -404,6 +416,9 @@ public class DataOutHandler {
 	 * Data packet used to accumulate data to be sent using DataOutHandler
 	 * 
 	 * This class encapsulates one JSON object which holds any number of related data
+	 * 
+	 * Note: We use this class instead of just building a JSON packet and sending it
+	 * because AWS doesn't directly accept JSON, it expects a HashMap.
 	 * 
 	 * @author scott.coleman
 	 *
@@ -577,7 +592,11 @@ public class DataOutHandler {
 				
 		}
 		
-		
+		/**
+		 * Adds a tag/data pair to the packet
+		 * @param tag
+		 * @param value
+		 */
 		public void add(String tag, Vector values) {
 			if (mLogFormat == LOG_FORMAT_JSON) {
 				mStr += tag + ":\"" + values.toString() + "\",";			
@@ -598,23 +617,10 @@ public class DataOutHandler {
 		
 	}
 
-//	// This one uses Android JSON objects - no longer used
-//	public void handleDataOut(final JSONObject jsonObject) {
-//		/// TODO - THis is broken!
-//		DataOutPacket packet = new DataOutPacket();
-//		// To match our format we must remove the starting and ending curly brace
-//		String tmp = jsonObject.toString();
-//		tmp = tmp.substring(1,tmp.length() - 1);
-//		packet.mStr += tmp;
-//		
-//		//packet.mItem.put("data", jsonObject.toString());
-////		packet.mItem.putObject(jsonObject);
-//		
-//		handleDataOut(packet);
-//	}	
-//	
-	// This one uses Android Jackson JSON objects
-	public void handleDataOut(final ObjectNode jsonObject) {
+	// Note - the following two routines are Deprecated. Use 
+	//	DataOutPacket instead of sending a JSON object or array
+	
+	public void handleDataOut(final ObjectNode jsonObject) { // This one uses Android Jackson JSON objects
 		DataOutPacket packet = new DataOutPacket();
 		// To match our format we must remove the starting and ending curly brace
 		String tmp = jsonObject.toString();
@@ -628,7 +634,6 @@ public class DataOutHandler {
 	
 	
 	public void handleDataOut(final ArrayNode jsonArray) {
-
 		DataOutPacket packet = new DataOutPacket();
 		// To match our format we must remove the starting and ending curly brace
 		String tmp = jsonArray.toString();
@@ -639,18 +644,16 @@ public class DataOutHandler {
 		handleDataOut(packet);
 	}	
 	
-	
 	/**
 	 * Sends a data packet to all configured output sinks
-	 * 
+	 * Actually it just puts it in the mPendingQueue to
+	 * be sent out later 
 	 * 
 	 * @param packet - data Packet to send to output sinks
 	 */
 	public void handleDataOut(final DataOutPacket packet) {
 
-		
 		//packet.mItem.put("data", packet.mData);		
-		
 		
 		if (mLogFormat == LOG_FORMAT_JSON) {
 			packet.mStr += "},";
@@ -667,22 +670,9 @@ public class DataOutHandler {
 		if (mDatabaseEnabled) {
 			String dataPacketString = packet.mItem.toString();
 			T2RestPacket pkt = new T2RestPacket(dataPacketString, packet.hashMap);
-//			T2RestPacket pkt = new T2RestPacket(dataPacketString);
 			
 			Log.d(TAG, "Queueing document " + pkt.mId);
-			
-			
-//			String jsonString = "[" + dataPacketString + "]";
-//			RequestParams params = new RequestParams("json", jsonString);
-//	        T2RestClient.post(COUCHBASE_URL, params, new AsyncHttpResponseHandler() {
-//	            @Override
-//	            public void onSuccess(String response) {
-//					Log.d(TAG, "Posing Successful: " + response);
-//	                
-//	            }
-//	        });
 
-			
 			synchronized(mPendingQueue) {
 				mPendingQueue.add(0,  pkt);
 			}
@@ -701,6 +691,13 @@ public class DataOutHandler {
 	}
 	
 	
+	/**
+	 * @author scott.coleman
+	 *
+	 * This thread handles maintenance of the mPendingQueue
+	 * sending data out if the network is available.
+	 * 
+	 */
 	class DispatchThread extends Thread {
 		private boolean isRunning = false;
 		private boolean cancelled = false;
@@ -708,7 +705,6 @@ public class DataOutHandler {
 		@Override
 		public void run() {
 			isRunning = true;
-			
 			
 			while(true) {
 				// Break out if this was cancelled.
@@ -796,7 +792,6 @@ public class DataOutHandler {
 					        
 							mPendingQueue.clear();
 						} // End if (mPendingQueue.size() > 0)
-						
 					} // End synchronized(mPendingQueue) 
 				}
 			} // End while(true)
@@ -815,6 +810,9 @@ public class DataOutHandler {
 		}
 	}
 	
+    /**
+     * @return true if network is available
+     */
     public boolean isNetworkAvailable() {
         ConnectivityManager cm = (ConnectivityManager) 
           mContext.getSystemService(Context.CONNECTIVITY_SERVICE);

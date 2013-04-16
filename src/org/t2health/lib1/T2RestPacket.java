@@ -35,6 +35,11 @@ import com.amazonaws.services.dynamodb.model.AttributeValue;
 
 import android.util.Log;
 
+/**
+ * @author scott.coleman
+ * Encapsulates a database entry
+ *
+ */
 public class T2RestPacket {
 	
 	private static final String TAG = "BFDemo";	
@@ -42,23 +47,20 @@ public class T2RestPacket {
 	public static final int STATUS_POSTED = 1;		// Posted to server but no response received
 	public static final int STATUS_RECEIVED = 2;	// Positive ack received from server
 	
-	
 	public String mId = "nothing";
 	public String mJson;
 	public int mStatus;
 	HashMap<String, AttributeValue> hashMap = new HashMap<String, AttributeValue>();		
 	
-	
 	T2RestPacket(String json) {
 		mJson = json;
 		mStatus = STATUS_PENDING;
 		
-		 Pattern p = Pattern.compile("\"record_id\":\"[0-9a-zA-Z-]*\"");
-		 Matcher m = p.matcher(json);	
-		 if (m.find()) {
-				mId = m.group(0);
-		
-		 }
+		Pattern p = Pattern.compile("\"record_id\":\"[0-9a-zA-Z-]*\"");
+		Matcher m = p.matcher(json);	
+		if (m.find()) {
+			mId = m.group(0);
+		}
 	}
 	
 	T2RestPacket(String json, HashMap<String, AttributeValue> _hashMap) {
@@ -66,12 +68,11 @@ public class T2RestPacket {
 		mStatus = STATUS_PENDING;
 		
 		hashMap = _hashMap;
-		 Pattern p = Pattern.compile("\"record_id\":\"[0-9a-zA-Z-]*\"");
-		 Matcher m = p.matcher(json);	
-		 if (m.find()) {
-				mId = m.group(0);
-		
-		 }
+		Pattern p = Pattern.compile("\"record_id\":\"[0-9a-zA-Z-]*\"");
+		Matcher m = p.matcher(json);	
+		if (m.find()) {
+			mId = m.group(0);
+		}
 	}
 	
 
