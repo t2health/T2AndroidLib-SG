@@ -391,6 +391,21 @@ public class DataOutHandler implements JREngageDelegate {
 	 * @param t2AuthDelegate Callbacks to send status to.
 	 * @throws DataOutHandlerException
 	 */
+	public void initializeDatabase(String remoteDatabase, String databaseType) throws DataOutHandlerException {
+		mSharedPreferences = PreferenceManager.getDefaultSharedPreferences(mContext);
+		// Do it this way for backward compatibility
+		mSharedPreferences.edit().putString("external_database_type", databaseType);
+		initializeDatabase("", "", "", "", remoteDatabase);		
+	}
+
+	/**
+	 * Initialized specified database
+	 * 
+	 * @param remoteDatabase URL of database to send data to. 
+	 * @param databaseType Type of database (AWS, TRest, T2Drupal, etc.).
+	 * @param t2AuthDelegate Callbacks to send status to.
+	 * @throws DataOutHandlerException
+	 */
 	public void initializeDatabase(String remoteDatabase, String databaseType, T2AuthDelegate t2AuthDelegate) throws DataOutHandlerException {
 		mSharedPreferences = PreferenceManager.getDefaultSharedPreferences(mContext);
 		// Do it this way for backward compatibility
@@ -653,18 +668,7 @@ public class DataOutHandler implements JREngageDelegate {
 			
 	    	mData = JsonNodeFactory.instance.objectNode();		
 	    	mItem = JsonNodeFactory.instance.objectNode();		
-	    	mItem.put(DataOutHandlerTags.RECORD_ID, id);
-	    	mItem.put(DataOutHandlerTags.TIME_STAMP, currentTime);
-	    	mItem.put(DataOutHandlerTags.CREATED_AT, currentTimeString);
-	    	mItem.put(DataOutHandlerTags.USER_ID, mUserId);
-	    	mItem.put(DataOutHandlerTags.SESSION_DATE, mSessionDate);
-	    	if (mSessionIdEnabled) {
-		    	mItem.put(DataOutHandlerTags.SESSION_ID, mSessionId);
-	    	}
-	    	mItem.put(DataOutHandlerTags.APP_NAME, mAppName);
-	    	mItem.put(DataOutHandlerTags.DATA_TYPE, mDataType);
-	    	mItem.put(DataOutHandlerTags.PLATFORM, "Android");		    	
-	    	mItem.put(DataOutHandlerTags.PLATFORM_VERSION, Build.VERSION.RELEASE);		    	
+	    	
 	    	
 			if (mDatabaseType == DATABASE_TYPE_AWS) {
 
@@ -681,9 +685,120 @@ public class DataOutHandler implements JREngageDelegate {
 		    	addAttributeWithS(DataOutHandlerTags.PLATFORM, "Android");
 		    	addAttributeWithS(DataOutHandlerTags.PLATFORM_VERSION, Build.VERSION.RELEASE);
 			}
+			else if (mDatabaseType == DATABASE_TYPE_T2_DRUPAL) {
+				
+		    	mItem.put("title", id);
+		    	mItem.put("type", "sensor_data");
+		    	mItem.put("language", "und");
+		    	
+		    	putDrupalNode(DataOutHandlerTags.RECORD_ID, id, mItem);
+		    	putDrupalNode(DataOutHandlerTags.TIME_STAMP, currentTime, mItem);
+		    	putDrupalNode(DataOutHandlerTags.CREATED_AT, currentTimeString, mItem);
+		    	putDrupalNode(DataOutHandlerTags.USER_ID, mUserId, mItem);
+		    	putDrupalNode(DataOutHandlerTags.SESSION_DATE, mSessionDate, mItem);
+		    	if (mSessionIdEnabled)
+		    		putDrupalNode(DataOutHandlerTags.SESSION_ID, mSessionId, mItem);
+		    	putDrupalNode(DataOutHandlerTags.APP_NAME, mAppName, mItem);
+		    	putDrupalNode(DataOutHandlerTags.DATA_TYPE, mDataType, mItem);
+		    	putDrupalNode(DataOutHandlerTags.PLATFORM, "Android", mItem);
+		    	putDrupalNode(DataOutHandlerTags.PLATFORM_VERSION, Build.VERSION.RELEASE, mItem);
+				
+			}
+			else {
+		    	mItem.put(DataOutHandlerTags.RECORD_ID, id);
+		    	mItem.put(DataOutHandlerTags.TIME_STAMP, currentTime);
+		    	mItem.put(DataOutHandlerTags.CREATED_AT, currentTimeString);
+		    	mItem.put(DataOutHandlerTags.USER_ID, mUserId);
+		    	mItem.put(DataOutHandlerTags.SESSION_DATE, mSessionDate);
+		    	if (mSessionIdEnabled) {
+			    	mItem.put(DataOutHandlerTags.SESSION_ID, mSessionId);
+		    	}
+		    	mItem.put(DataOutHandlerTags.APP_NAME, mAppName);
+		    	mItem.put(DataOutHandlerTags.DATA_TYPE, mDataType);
+		    	mItem.put(DataOutHandlerTags.PLATFORM, "Android");		    	
+		    	mItem.put(DataOutHandlerTags.PLATFORM_VERSION, Build.VERSION.RELEASE);				
+				
+			}
 		}
 
 		
+		/**
+		 * Writes drual formatted node to specified node (String)
+		 * 
+		 * @param tag Data Tag
+		 * @param value Data Value
+		 * @param node Node to write to 
+		 */
+		private void putDrupalNode(String tag, String value, ObjectNode node) {
+			String newTag = "field_" + tag.toLowerCase();
+			ObjectNode valueNode = JsonNodeFactory.instance.objectNode();		
+			ObjectNode undNode = JsonNodeFactory.instance.objectNode();		
+			ArrayNode arrayNode = JsonNodeFactory.instance.arrayNode();		
+			valueNode.put("value", value);
+			arrayNode.add(valueNode);	
+			undNode.put("und", arrayNode);			
+			node.put(newTag, undNode);
+		}
+		
+		/**
+		 * Writes drual formatted node to specified node (Long)
+		 * 
+		 * @param tag Data Tag
+		 * @param value Data Value
+		 * @param node Node to write to 
+		 */
+		private void putDrupalNode(String tag, long value, ObjectNode node) {
+			String newTag = "field_" + tag.toLowerCase();
+			ObjectNode valueNode = JsonNodeFactory.instance.objectNode();		
+			ObjectNode undNode = JsonNodeFactory.instance.objectNode();		
+			ArrayNode arrayNode = JsonNodeFactory.instance.arrayNode();		
+			valueNode.put("value", value);
+			arrayNode.add(valueNode);	
+			undNode.put("und", arrayNode);			
+			node.put(newTag, undNode);
+		}
+		
+		/**
+		 * Writes drual formatted node to specified node (Int)
+		 * 
+		 * @param tag Data Tag
+		 * @param value Data Value
+		 * @param node Node to write to 
+		 */
+		private void putDrupalNode(String tag, int value, ObjectNode node) {
+			String newTag = "field_" + tag.toLowerCase();
+			ObjectNode valueNode = JsonNodeFactory.instance.objectNode();		
+			ObjectNode undNode = JsonNodeFactory.instance.objectNode();		
+			ArrayNode arrayNode = JsonNodeFactory.instance.arrayNode();		
+			valueNode.put("value", value);
+			arrayNode.add(valueNode);	
+			undNode.put("und", arrayNode);			
+			node.put(newTag, undNode);
+		}
+		
+		/**
+		 * Writes drual formatted node to specified node (Doubleg)
+		 * 
+		 * @param tag Data Tag
+		 * @param value Data Value
+		 * @param node Node to write to 
+		 */
+		private void putDrupalNode(String tag, double value, ObjectNode node) {
+			String newTag = "field_" + tag.toLowerCase();
+			ObjectNode valueNode = JsonNodeFactory.instance.objectNode();		
+			ObjectNode undNode = JsonNodeFactory.instance.objectNode();		
+			ArrayNode arrayNode = JsonNodeFactory.instance.arrayNode();		
+			valueNode.put("value", value);
+			arrayNode.add(valueNode);	
+			undNode.put("und", arrayNode);			
+			node.put(newTag, undNode);
+		}
+		
+		/**
+		 * Checks to see if tag is valid (Conteined in DataOutHandlerTags)
+		 * @param tag Tag to check
+		 * @return true if value, false otherwise
+		 */
 		boolean checkTag(String tag) {
 			boolean found = false;
 			Field[] fields = DataOutHandlerTags.class.getDeclaredFields();
@@ -731,7 +846,7 @@ public class DataOutHandler implements JREngageDelegate {
 		 */
 		public void add(String tag, double value) {
 			
-			checkTag(tag);			
+//			checkTag(tag);			
 			if (mLogFormat == LOG_FORMAT_JSON) {
 				mStr += String.format("%s:%f,", tag,value);
 			}
@@ -739,10 +854,15 @@ public class DataOutHandler implements JREngageDelegate {
 				mStr += "" + value + ",";			
 			}
 			
-			mItem.put(tag,value);	
 			if (mDatabaseType == DATABASE_TYPE_AWS) {
 		    	addAttributeWithS(tag, String.valueOf(value));
-			}			
+			}
+			else if (mDatabaseType == DATABASE_TYPE_T2_DRUPAL) {
+				putDrupalNode(tag, value, mItem);
+			}
+			else {
+				mItem.put(tag,value);	
+			}
 		}
 		
 		/**
@@ -761,11 +881,16 @@ public class DataOutHandler implements JREngageDelegate {
 			else {
 				mStr += "" + value + ",";			
 			}
-			mItem.put(tag,value);	
+			
 			if (mDatabaseType == DATABASE_TYPE_AWS) {
 		    	addAttributeWithS(tag, String.valueOf(value));
+			}
+			else if (mDatabaseType == DATABASE_TYPE_T2_DRUPAL) {
+				putDrupalNode(tag, value, mItem);
+			}
+			else {
+				mItem.put(tag,value);	
 			}			
-				
 		}
 		
 		/**
@@ -782,11 +907,16 @@ public class DataOutHandler implements JREngageDelegate {
 			else {
 				mStr += "" + value + ",";			
 			}
-			mItem.put(tag,value);	
+			
 			if (mDatabaseType == DATABASE_TYPE_AWS) {
 		    	addAttributeWithS(tag, String.valueOf(value));
-			}			
-				
+			}
+			else if (mDatabaseType == DATABASE_TYPE_T2_DRUPAL) {
+				putDrupalNode(tag, value, mItem);
+			}
+			else {
+				mItem.put(tag,value);	
+			}				
 		}
 
 		/**
@@ -803,11 +933,16 @@ public class DataOutHandler implements JREngageDelegate {
 			else {
 				mStr += "" + value + ",";			
 			}
-			mItem.put(tag,value);
+			
 			if (mDatabaseType == DATABASE_TYPE_AWS) {
-		    	addAttributeWithS(tag, String.valueOf(value));
-			}			
-					
+				addAttributeWithS(tag, String.valueOf(value));
+			}
+			else if (mDatabaseType == DATABASE_TYPE_T2_DRUPAL) {
+				putDrupalNode(tag, value, mItem);
+			}
+			else {
+				mItem.put(tag,value);	
+			}				
 		}
 
 		/**
@@ -824,12 +959,21 @@ public class DataOutHandler implements JREngageDelegate {
 			else {
 				mStr += "" + value + ",";			
 			}
-			mItem.put(tag,value);	
+			
+			
 			if (mDatabaseType == DATABASE_TYPE_AWS) {
-		    	addAttributeWithS(tag, String.valueOf(value));
-			}			
-				
+				addAttributeWithS(tag, String.valueOf(value));
+			}
+			else if (mDatabaseType == DATABASE_TYPE_T2_DRUPAL) {
+				putDrupalNode(tag, value, mItem);
+			}
+			else {
+				mItem.put(tag,value);	
+			}
 		}
+		
+		
+		// TODO : fix vector add
 		
 		/**
 		 * Adds a tag/ data pair to the packet (as Vector)
@@ -845,11 +989,28 @@ public class DataOutHandler implements JREngageDelegate {
 			else {
 				mStr += "" + values.toString() + ",";			
 			}
-			mItem.put(tag,values.toString());	
+			
 			if (mDatabaseType == DATABASE_TYPE_AWS) {
 				addAttributeWithSS(tag, values);
-			}			
+			}
+			else if (mDatabaseType == DATABASE_TYPE_T2_DRUPAL) {
+				// Note special format for vector in drupal!
+				String newTag = "field_" + tag.toLowerCase();
+				ObjectNode undNode = JsonNodeFactory.instance.objectNode();		
+				ArrayNode arrayNode = JsonNodeFactory.instance.arrayNode();		
+
+				for (Object v : values) {
+					ObjectNode valueNode = JsonNodeFactory.instance.objectNode();		
+					valueNode.put("value", v.toString());
+					arrayNode.add(valueNode);	
+				}
 				
+				undNode.put("und", arrayNode);			
+				mItem.put(newTag, undNode);				
+			}
+			else {
+				mItem.put(tag,values.toString());	
+			}			
 		}
 		 
 		/* (non-Javadoc)
@@ -1067,33 +1228,9 @@ public class DataOutHandler implements JREngageDelegate {
 							            Log.e(TAG, "No Stored Cookies to use: ");
 							        }   								
 									
-							        JSONObject object;
+									Log.d(TAG, "Posting entry " + packet.mJson.toString());
 							        
-									try {
-										object = (JSONObject) new JSONTokener(packet.mJson).nextValue();
-										mRecordId = object.getString("record_id");
-								        Log.e(TAG, "record_id = " + mRecordId);
-									} catch (JSONException e) {
-										Log.e(TAG, "Badly formed JSON");
-										e.printStackTrace();
-									}
-
-							        
-							        String body = "{\"type\":\"article\"," +
-							          		"\"title\":\"Scott's Article B submitted via JSON REST\"," +
-							          		"\"body\":" +
-							          		"{\"und\":" +
-							          		"[" +
-							          		"{\"value\":" + 
-							          		//    "\"This is the body of the article.\"" + 
-							          		 "{" + 
-								          		"\"record_id\":\"" +     mRecordId + "\"" + 
-							          		 "}" +
-							          		//packet.mJson + 
-							          		"}" +
-							          		"]}}";							       
-							        
-							                drupalNodePut(body);										
+									drupalNodePut(packet.mJson.toString());
 								} // End if (mDatabaseType == DATABASE_TYPE_T2_DRUPAL)
 								
 								
