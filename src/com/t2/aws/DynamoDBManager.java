@@ -56,7 +56,7 @@ public class DynamoDBManager {
 	 */
 	public static void createTable() {
 
-		AmazonDynamoDBClient ddb = DataOutHandler.clientManager
+		AmazonDynamoDBClient ddb = DataOutHandler.sClientManager
 				.ddb();
 
 		KeySchemaElement kse = new KeySchemaElement().withAttributeName(
@@ -72,7 +72,7 @@ public class DynamoDBManager {
 		try {
 			ddb.createTable(request);
 		} catch (AmazonServiceException ex) {
-			DataOutHandler.clientManager
+			DataOutHandler.sClientManager
 					.wipeCredentialsOnAuthError(ex);
 		}
 	}
@@ -83,7 +83,7 @@ public class DynamoDBManager {
 	public static String getTestTableStatus() {
 
 		try {
-			AmazonDynamoDBClient ddb = DataOutHandler.clientManager
+			AmazonDynamoDBClient ddb = DataOutHandler.sClientManager
 					.ddb();
 
 			DescribeTableRequest request = new DescribeTableRequest()
@@ -97,7 +97,7 @@ public class DynamoDBManager {
 		} catch (ResourceNotFoundException e) {
 			return "";
 		} catch (AmazonServiceException ex) {
-			DataOutHandler.clientManager
+			DataOutHandler.sClientManager
 					.wipeCredentialsOnAuthError(ex);
 		}
 
@@ -108,7 +108,7 @@ public class DynamoDBManager {
 	 * Inserts ten users with userNo from 1 to 10 and random names.
 	 */
 	public static void insertUsers() {
-		AmazonDynamoDBClient ddb = DataOutHandler.clientManager
+		AmazonDynamoDBClient ddb = DataOutHandler.sClientManager
 				.ddb();
 
 		try {
@@ -135,7 +135,7 @@ public class DynamoDBManager {
 				ddb.putItem(request);
 			}
 		} catch (AmazonServiceException ex) {
-			DataOutHandler.clientManager
+			DataOutHandler.sClientManager
 					.wipeCredentialsOnAuthError(ex);
 		}
 	}
@@ -145,7 +145,7 @@ public class DynamoDBManager {
 	 */
 	public static List<Map<String, AttributeValue>> getUserList() {
 
-		AmazonDynamoDBClient ddb = DataOutHandler.clientManager
+		AmazonDynamoDBClient ddb = DataOutHandler.sClientManager
 				.ddb();
 
 		ScanRequest request = new ScanRequest();
@@ -157,7 +157,7 @@ public class DynamoDBManager {
 			return result.getItems();
 
 		} catch (AmazonServiceException ex) {
-			DataOutHandler.clientManager
+			DataOutHandler.sClientManager
 					.wipeCredentialsOnAuthError(ex);
 		}
 
@@ -169,7 +169,7 @@ public class DynamoDBManager {
 	 */
 	public static Map<String, AttributeValue> getUserInfo(int userNo) {
 
-		AmazonDynamoDBClient ddb = DataOutHandler.clientManager
+		AmazonDynamoDBClient ddb = DataOutHandler.sClientManager
 				.ddb();
 
 		AttributeValue userNoAttr = new AttributeValue().withN(String
@@ -184,7 +184,7 @@ public class DynamoDBManager {
 			return result.getItem();
 
 		} catch (AmazonServiceException ex) {
-			DataOutHandler.clientManager
+			DataOutHandler.sClientManager
 					.wipeCredentialsOnAuthError(ex);
 		}
 
@@ -197,7 +197,7 @@ public class DynamoDBManager {
 	public static void updateAttributeStringValue(String value, String key,
 			AttributeValue targetValue) {
 
-		AmazonDynamoDBClient ddb = DataOutHandler.clientManager
+		AmazonDynamoDBClient ddb = DataOutHandler.sClientManager
 				.ddb();
 
 		AttributeValue av = new AttributeValue().withS(value);
@@ -214,7 +214,7 @@ public class DynamoDBManager {
 		try {
 			ddb.updateItem(request);
 		} catch (AmazonServiceException ex) {
-			DataOutHandler.clientManager
+			DataOutHandler.sClientManager
 					.wipeCredentialsOnAuthError(ex);
 		}
 	}
@@ -224,7 +224,7 @@ public class DynamoDBManager {
 	 */
 	public static void deleteUser(AttributeValue targetValue) {
 
-		AmazonDynamoDBClient ddb = DataOutHandler.clientManager
+		AmazonDynamoDBClient ddb = DataOutHandler.sClientManager
 				.ddb();
 
 		Key primaryKey = new Key().withHashKeyElement(targetValue);
@@ -234,7 +234,7 @@ public class DynamoDBManager {
 		try {
 			ddb.deleteItem(request);
 		} catch (AmazonServiceException ex) {
-			DataOutHandler.clientManager
+			DataOutHandler.sClientManager
 					.wipeCredentialsOnAuthError(ex);
 		}
 	}
@@ -245,7 +245,7 @@ public class DynamoDBManager {
 	 */
 	public static void cleanUp() {
 
-		AmazonDynamoDBClient ddb = DataOutHandler.clientManager
+		AmazonDynamoDBClient ddb = DataOutHandler.sClientManager
 				.ddb();
 
 		DeleteTableRequest request = new DeleteTableRequest()
@@ -254,7 +254,7 @@ public class DynamoDBManager {
 			ddb.deleteTable(request);
 
 		} catch (AmazonServiceException ex) {
-			DataOutHandler.clientManager
+			DataOutHandler.sClientManager
 					.wipeCredentialsOnAuthError(ex);
 		}
 	}

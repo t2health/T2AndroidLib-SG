@@ -27,6 +27,8 @@
  */
 package org.t2health.lib1;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -40,23 +42,40 @@ import java.util.TimeZone;
 import java.util.UUID;
 import java.util.Vector;
 
+import org.apache.http.cookie.Cookie;
 import org.codehaus.jackson.node.ArrayNode;
 import org.codehaus.jackson.node.JsonNodeFactory;
 import org.codehaus.jackson.node.ObjectNode;
+import org.json.JSONException;
 import org.json.JSONObject;
+import org.json.JSONTokener;
 import org.t2health.lib1.LogWriter;
 
 import com.amazonaws.AmazonServiceException;
 import com.t2.aws.Constants;
 import com.t2.aws.DynamoDBManager;
 import com.t2.aws.PropertyLoader;
+import com.t2.drupalsdk.ServicesClient;
+import com.t2.drupalsdk.UserServices;
+//import com.t2.drupalsdk.ServicesClient;
 import com.amazonaws.services.dynamodb.AmazonDynamoDBClient;
 import com.amazonaws.services.dynamodb.model.AttributeValue;
 import com.amazonaws.services.dynamodb.model.PutItemRequest;
 import com.amazonaws.tvmclient.AmazonClientManager;
+import com.janrain.android.engage.JREngage;
+import com.janrain.android.engage.JREngageDelegate;
+import com.janrain.android.engage.JREngageError;
+import com.janrain.android.engage.net.async.HttpResponseHeaders;
+import com.janrain.android.engage.types.JRActivityObject;
+import com.janrain.android.engage.types.JRDictionary;
+import com.janrain.android.utils.T2CookieStore;
 import com.loopj.android.http.AsyncHttpResponseHandler;
+import com.loopj.android.http.JsonHttpResponseHandler;
+import com.loopj.android.http.PersistentCookieStore;
 import com.loopj.android.http.RequestParams;
 
+import android.app.Activity;
+import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
@@ -69,30 +88,24 @@ import android.preference.PreferenceManager;
 import android.util.Log;
 import android.view.View;
 
-//T2 CAS Stuff
-//import com.t2auth.AuthUtils;
-//import com.t2auth.AuthUtils.H2PostEntryTask;
-//import com.t2auth.AuthUtils.T2LogoutTask;
-//import com.t2auth.AuthUtils.T2ServiceTicketTask;
-
-//CouchDB Stuff
-//import org.ektorp.CouchDbConnector;
-//import org.ektorp.CouchDbInstance;
-//import org.ektorp.ReplicationCommand;
-//import org.ektorp.http.HttpClient;
-//import com.couchbase.touchdb.TDServer;
-//import com.couchbase.touchdb.router.TDURLStreamHandlerFactory;
-
 /**
  * Handles distribution of processed Biometric data
  *   Using DataOutHandler relieves the calling activity of the burden of knowing
- *   where to sent it's data
+ *   where to sent it's data.
  *   
- *   One of the data sinks that will be used in the future in database. This class will 
- *   encapsulate all of the database particulars from the calling activity
+ *   There are three features to this library:
+ *   1. Serves as a LogCat output generator (if mLogCatEnabled == true).
+ *   2. Serves as a data file output mechanism: (mLoggingEnabled == true, 
+ *      log file based on mUserId + "_" + mSessionDate.
+ *      These log files are saved to the android device file system.
+ *   3. Serves as an external database router. Sends data to which ever database
+ *      is enabled (mDatabaseType).
+ *   
+ *   This class is used to encapsulate all of the database particulars 
+ *   from the calling activity
  *   
  *   
- *   Currently data is stored in two formats:
+ *   Currently log data may be stored stored in one of two formats:
  *   Text (mStr) for output to log files
  *   JSON format (mItem) for output to TouchDB
  *   
@@ -102,48 +115,27 @@ import android.view.View;
  * @author scott.coleman
  *
  */
-public class DataOutHandler {
+public class DataOutHandler implements JREngageDelegate {
+	
 	private final String TAG = getClass().getName();	
 
 	//private static final String DEFAULT_REST_DB_URL = "http://gap.t2health.org/and/phpWebservice/webservice2.php";	 
 	// private static final String DEFAULT_REST_DB_URL = "http://gap.t2health.org/and/json.php";	 
 	private static final String DEFAULT_REST_DB_URL = "http://ec2-50-112-197-66.us-west-2.compute.amazonaws.com/mongo/json.php";
 	private static final String DEFAULT_AWS_DB_URL = "h2tvm.elasticbeanstalk.com";
+	private static final String DEFAULT_DRUPAL_DB_URL = "http://t2health.us/h2/android/";
 	
+	private static final boolean AWS_USE_SSL = false;
+	
+    private static String ENGAGE_APP_ID = "khekfggiembncbadmddh";
+//    private static String ENGAGE_TOKEN_URL = "https://t2health.us/h2/rpx/token_handler?destination=node";	
+    private static String ENGAGE_TOKEN_URL = "http://t2health.us/h2/rpx/token_handler?destination=node";	
+
 	private static final int LOG_FORMAT_JSON = 1;	
 	private static final int LOG_FORMAT_FLAT = 2;	
 	
-	public static final String TIME_STAMP = "\"TS\"";
-	public static final String SENSOR_TIME_STAMP = "STS";
-	public static final String RAW_GSR = "GSR";					// Microsiemens
-	public static final String AVERAGE_GSR = "GSRAVG";			// Microsiemens 1 sec average
-	public static final String USER_ID = "UID";
-	public static final String SESSION_ID = "SES";
-	public static final String SENSOR_ID = "SID"; 	
-	public static final String RAW_HEARTRATE = "HR"; 			// BPM
-	public static final String RAW_SKINTEMP = "ST"; 			// Degrees
-	public static final String RAW_EMG = "EMG"; 				// 
-	public static final String AVERAGE_HEARTRATE = "HRAVG"; 	// BPM 3 sec average
-	public static final String RAW_ECG = "ECG";
-	public static final String FILTERED_ECG = "FECG";
-	public static final String RAW_RESP_RATE = "RR";			// BPM
-	public static final String AVERAGE_RESP_RATE = "RRAVG";		// BPM 10 sec average
-	public static final String COMPLETION_PERCENT = "COM";
-	public static final String DURATION = "DUR";					// seconds
-	public static final String NOTATION = "NOT";
-	public static final String CATEGORY = "CAT";
-	public static final String EEG_SPECTRAL = "EEG";
-	public static final String EEG_SIG_STRENGTH = "EEGSIG";
-	public static final String EEG_ATTENTION = "EEGATT";
-	public static final String EEG_MEDITATION = "EEGMED";
-	public static final String HRV_RAW_IBI = "IBI";					// HR inter-beat interval (Ms)
-	public static final String HRV_LF_NU = "LFNU";					// HR low frequency content normalized units (0 - 100)
-	public static final String HRV_HF_NU = "HFNU";					// HR low frequency content normalized units (0 - 100)
-	public static final String HRV_FFT = "HRVFFT";					// FFT of IBI
-	public static final String HRV_RAW_SDNN = "SDNN";				// SDNN
-	public static final String NOTE = "note";
-	public static final String AIRFLOW = "AIRFLOW";
-	public static final String SPO2 = "SPO2";
+
+	public static final String SHORT_TIME_STAMP = "\"TS\"";
 
 	public static final String DATA_TYPE_RATING = "RatingData";
 	public static final String DATA_TYPE_INTERNAL_SENSOR = "InternalSensor";
@@ -154,13 +146,45 @@ public class DataOutHandler {
 	private boolean mDatabaseEnabled = false;
 	private boolean mSessionIdEnabled = false;
 	
+	/**
+	 * User identification to be associated with data stored
+	 */
 	public String mUserId = "";
+	
+	/**
+	 * Date a particular session started, there can be multiple data 
+	 * saves for any session
+	 */
 	public String mSessionDate = "";
+	
+	/**
+	 * Name of calling application (logged with data)
+	 */
 	public String mAppName = "";
+	
+	/**
+	 * Source type of data (internal, external, etc.)
+	 */
 	public String mDataType = "";
+	
+	/**
+	 * Used to write data logs
+	 */
 	private LogWriter mLogWriter;	
+
+	/**
+	 * Context of calling party
+	 */
 	private Context mContext;
+
+	/**
+	 * Desired format of data lof files
+	 */
 	private int mLogFormat = LOG_FORMAT_JSON;	// Alternatively LOG_FORMAT_FLAT 	
+
+	/**
+	 * ID of a particular session (for multiple sessions in an application run
+	 */
 	private long mSessionId;
 	
 	/**
@@ -186,29 +210,110 @@ public class DataOutHandler {
 	 */
 	private String mApplicationVersion = "";
 
-	// T2 CAS Stuff
-	//    private T2ServiceTicketTask mServiceTicketTask = null;
-	//    private H2PostEntryTask mPostEntryTask = null;
+	// JanRain Stuff
+	String mEngageAppId = ENGAGE_APP_ID;
+	String mEngageTokenUrl = ENGAGE_TOKEN_URL;
+	
+	// T2 Drupal stuff
+	/**
+	 * Used to save Drupal session cookies for authentication.
+	 */
+	private PersistentCookieStore mCookieStore;
+
+	/**
+	 * HTTP services client used to talk to Drupal.
+	 */
+	private ServicesClient mServicesClient;	
+
+	/**
+	 * Engage instance for openID authentication
+	 */
+	private JREngage mEngage;
+	
+    /**
+     * JanRain Callbacks for notification of auth success/fail, etc.
+     */
+    private T2AuthDelegate mT2AuthDelegate;    
+    
+    /**
+     * Contains information about authenticated user
+     */
+    private JRDictionary mAuth_info;
+
+    /**
+     * The provider the user used to authenticate with (provided by JanRain)
+     */
+    private String mAuthProvider;	
+
+    /**
+	 * True if JanRain has successfully authenticated a user. 
+	 */
+	private boolean mAuthenticated = false;
+
+	/**
+	 * Most recently sent record id
+	 */
+	private String mRecordId;
     
 	/**
 	 * Database manager when sending data to external Amazon database
 	 */
-	public static AmazonClientManager clientManager = null;		
+	public static AmazonClientManager sClientManager = null;		
 
-	// Right now we're only supporting two database types.
-	//	T2 Rest server (goes to Mongo DB)
-	//	AWS (Goes to AWS DynamoDB
-	private final static int DATABASE_TYPE_AWS = 0;
-	private final static int DATABASE_TYPE_T2_REST = 1;
-	
-	private int mDatabaseType = DATABASE_TYPE_AWS; // Default to AWS
+	// Database types. 
+	//		Note that different database types
+	// 		may need different processing and even 
+	//		different structures, thus is it important to
+	//		use DataOutPacket structure to add data
+	//	
+	public final static int DATABASE_TYPE_AWS = 0;			//	AWS (Goes to AWS DynamoDB)
+	public final static int DATABASE_TYPE_T2_REST = 1; 		// T2 Rest server (goes to Mongo DB)
+	public final static int DATABASE_TYPE_T2_DRUPAL = 2; 	//	T2 Drupal - goes to a Drupal database
+	public final static int DATABASE_TYPE_NONE = -1;
 	
 	/**
-	 * Constructor. Initializes context and user/session parameters
+	 * sets which type of external database is setup and used
+	 */
+	private int mDatabaseType;
+
+	/**
+	 * Sets the AWS table name into which data is stored (AWS only)
+	 */
+	private String mAwsTableName = "TestT2"; // Default to TestT2
+
+	/**
+	 * Shared preferences for this lib (will be the same as calling party)
+	 */
+	SharedPreferences mSharedPreferences;
+	
+	/**
+	 * Set this to true to require authtication for all database puts. 
+	 */
+	private boolean mRequiresAuthentication = true;
+	
+	/**
+	 * Sets  the RequiresAuthentication flag 
+	 * @param mRequiresAuthentication true/false
+	 */
+	public void setRequiresAuthentication(boolean mRequiresAuthentication) {
+		this.mRequiresAuthentication = mRequiresAuthentication;
+	}
+
+	/**
+	 * Sets the AWS table name (applicable only if AWS database is chosen)
+	 * @param awsTableName Name of the table
+	 */
+	public void setAwsTableName(String awsTableName) {
+		this.mAwsTableName = awsTableName;
+	}	
+	
+	/**
+	 * Constructor. Sets up context and user/session parameters
 	 * 
 	 * @param context	- Context of calling activity
 	 * @param userId	- User ID detected by calling activity 
 	 * @param sessionDate - Session date created by the calling activity (data/time stamp)
+	 * @param appName - Name of calling application
 	 */
 	public DataOutHandler(Context context, String userId, String sessionDate, String appName) {
 		mAppName = appName;
@@ -219,7 +324,7 @@ public class DataOutHandler {
 	}
 	
 	/**
-	 * Constructor. Initializes context and user/session parameters
+	 * Constructor. sets up context and user/session parameters
 	 * 
 	 * @param context	- Context of calling activity
 	 * @param userId	- User ID detected by calling activity 
@@ -238,14 +343,19 @@ public class DataOutHandler {
 		mSessionId = sessionId;
 	}
 	
+	/**
+	 * Disables database functionality
+	 */
 	public void disableDatabase() {
 		mDatabaseEnabled = false;
 	}
 	
+	/**
+	 * Enables database functionality
+	 */
 	public void enableDatabase() {
 		mDatabaseEnabled = true;
 	}
-	
 			
 	/**
 	 * @author scott.coleman
@@ -271,6 +381,40 @@ public class DataOutHandler {
 	    	Log.d(TAG, "Database status = " + status);
 	    }
 	 }	
+
+
+	/**
+	 * Initialized specified database
+	 * 
+	 * @param remoteDatabase URL of database to send data to. 
+	 * @param databaseType Type of database (AWS, TRest, T2Drupal, etc.).
+	 * @param t2AuthDelegate Callbacks to send status to.
+	 * @throws DataOutHandlerException
+	 */
+	public void initializeDatabase(String remoteDatabase, String databaseType, T2AuthDelegate t2AuthDelegate) throws DataOutHandlerException {
+		mSharedPreferences = PreferenceManager.getDefaultSharedPreferences(mContext);
+		// Do it this way for backward compatibility
+		mSharedPreferences.edit().putString("external_database_type", databaseType);
+		mT2AuthDelegate = t2AuthDelegate;
+		initializeDatabase("", "", "", "", remoteDatabase);		
+	}
+
+	/**
+	 * @param remoteDatabase URL of database to send data to. 
+	 * @param databaseType Type of database (AWS, TRest, T2Drupal, etc.)
+	 * @param t2AuthDelegate Callbacks to send status to.
+	 * @param awsTableName AWS table name to use when putting data.
+	 * @throws DataOutHandlerException
+	 */
+	public void initializeDatabase(String remoteDatabase, String databaseType, 
+			T2AuthDelegate t2AuthDelegate, String awsTableName) throws DataOutHandlerException {
+		mAwsTableName = awsTableName;
+		mSharedPreferences = PreferenceManager.getDefaultSharedPreferences(mContext);
+		// Do it this way for backward compatibility
+		mSharedPreferences.edit().putString("external_database_type", databaseType);
+		mT2AuthDelegate = t2AuthDelegate;
+		initializeDatabase("", "", "", "", remoteDatabase);		
+	}
 	
 	/**
 	 * Initializes the current database
@@ -278,31 +422,36 @@ public class DataOutHandler {
 	 * Note that all of the parameters (with the exception of remoteDatabase) sent to this routine are for CouchDB only.
 	 * Currently they are all N/A
 	 * 
+	 * Endpoint for all initialize variants.
+	 * 
 	 * @param databaseName		N/A Local SQLITE database name
 	 * @param designDocName		N/A Design document name
 	 * @param designDocId		N/A Design document ID
 	 * @param viewName			N/AView associated with database
 	 * @param remoteDatabase	Name of external database
+	 * @throws DataOutHandlerException 
 	 */
-	public void initializeDatabase(String databaseName, String designDocName, String designDocId, String viewName, String remoteDatabase) {
+	public void initializeDatabase(String databaseName, String designDocName, String designDocId, String viewName, String remoteDatabase) throws DataOutHandlerException {
 
 		mDatabaseEnabled = true;
-		
-		// Get chosen database from preferences
-		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mContext);
-		String sDatabaseType = prefs.getString("external_database_type", "AWS");
-		if (sDatabaseType.equalsIgnoreCase("AWS"))
-			mDatabaseType = DATABASE_TYPE_AWS;
-		else
-			mDatabaseType = DATABASE_TYPE_T2_REST;
 
+		// Set database type
+		mDatabaseType = DATABASE_TYPE_NONE; 
+
+		// Get chosen database from preferences
+		mSharedPreferences = PreferenceManager.getDefaultSharedPreferences(mContext);
+		String databaseTypeString = mSharedPreferences.getString("external_database_type", "AWS");
+
+		// Based on database type:
+		// 	Set up mRemoteDatabase based on either remoteDatabase if it's not blank,
+		// 	or default values based on database type
 		
-		// Set up mRemoteDatabase based on either remoteDatabase if it's not blank,
-		// or default values based on database type
-		switch (mDatabaseType) {
-		default:
-		case DATABASE_TYPE_AWS:
+		// Then do any database type specific initialization
+		
+		if (databaseTypeString.equalsIgnoreCase("AWS")) {
 			Log.d(TAG, "Using AWS Database type");
+
+			mDatabaseType = DATABASE_TYPE_AWS;
 			if (remoteDatabase != null ) {
 				if (remoteDatabase.equalsIgnoreCase("")) {
 					mRemoteDatabase = DEFAULT_AWS_DB_URL;			
@@ -310,11 +459,24 @@ public class DataOutHandler {
 				else {
 					mRemoteDatabase = remoteDatabase;
 				}
+				
+				// Note: for AWS we don't supply a token URL, thats
+				// only for interfacing with Drupal
+		        mEngage = JREngage.initInstance(mContext, mEngageAppId, "", this);
+//		        mEngage = JREngage.initInstance(mContext, mEngageAppId, mEngageTokenUrl, this);
+		        JREngage.blockOnInitialization();
+				
+				
+				//	clientManager = new AmazonClientManager(mContext.getSharedPreferences("com.amazon.aws.demo.AWSDemo", Context.MODE_PRIVATE), mRemoteDatabase);	
+				sClientManager = new AmazonClientManager(mSharedPreferences, mRemoteDatabase);	
+				// TBD - we should probably check the table status
+				//new CheckTableStatusTask().execute("");				
 			}
-			break;
-		
-		case DATABASE_TYPE_T2_REST:
+		}
+		else if (databaseTypeString.equalsIgnoreCase("T2REST")) {
 			Log.d(TAG, "Using T2 Rest Database type");
+
+			mDatabaseType = DATABASE_TYPE_T2_REST;
 			if (remoteDatabase != null ) {
 				if (remoteDatabase.equalsIgnoreCase("")) {
 					mRemoteDatabase = DEFAULT_REST_DB_URL;			
@@ -322,32 +484,58 @@ public class DataOutHandler {
 				else {
 					mRemoteDatabase = remoteDatabase;
 				}
+				
+		        mEngage = JREngage.initInstance(mContext, mEngageAppId, mEngageTokenUrl, this);
+		        JREngage.blockOnInitialization();
+			}			
+		}
+		else if (databaseTypeString.equalsIgnoreCase("T2DRUPAL")) {
+			Log.d(TAG, "Using T2 Drupal Database type");
+
+			mDatabaseType = DATABASE_TYPE_T2_DRUPAL;
+			if (remoteDatabase != null ) {
+				if (remoteDatabase.equalsIgnoreCase("")) {
+					mRemoteDatabase = DEFAULT_DRUPAL_DB_URL;			
+				}
+				else {
+					mRemoteDatabase = remoteDatabase;
+				}
+				
+		        mEngage = JREngage.initInstance(mContext, mEngageAppId, mEngageTokenUrl, this);
+		        JREngage.blockOnInitialization();
+
+		        mServicesClient = new ServicesClient(mRemoteDatabase);
+		        mCookieStore = new PersistentCookieStore(mContext);    
 			}
-			break;
 		}
 		
-		
+		// Make sure a valid database was selected
+		if (mDatabaseType == DATABASE_TYPE_NONE) {
+			throw new DataOutHandlerException("Invalid database type");
+		}
+
+		// Now do any global database (ot other)  initialization
 		Log.d(TAG, "Initializing T2 database dispatcher");
 		Log.d(TAG, "Remote database name = " + mRemoteDatabase);
 		mPendingQueue = new ArrayList<T2RestPacket>();		
 		mDispatchThread = new DispatchThread();
 		mDispatchThread.start();		
-		
-
-		if (mDatabaseType == DATABASE_TYPE_AWS) {
-			// Create AmazonClientManager with SharedPreference
-			clientManager = new AmazonClientManager(mContext.getSharedPreferences(
-					"com.amazon.aws.demo.AWSDemo", Context.MODE_PRIVATE), mRemoteDatabase);	
-			
-			// TBD - we should probably check the table status
-			//new CheckTableStatusTask().execute("");
-		}
 	}		
 
 	/**
-	 * @param context	Calling party's context
+	 * Displays authentication dialog and takes the user through
+	 * the entire authentication process.
 	 * 
-	 *  enables logging to external log file of entries sent to the database
+	 * @param thisActivity Calling party activity
+	 */
+	public void showAuthenticationDialog(Activity thisActivity) {
+        mEngage.showAuthenticationDialog(thisActivity);
+	}
+	
+	/**
+	 *  Enables logging to external log file of entries sent to the database
+	 *  
+	 * @param context	Calling party's context
 	 */
 	public void enableLogging(Context context) {
 		try {
@@ -378,11 +566,17 @@ public class DataOutHandler {
 		}
 	}
 
+	/**
+	 * Enables cat file logging of data puts
+	 */
 	public void enableLogCat() {
 		mLogCatEnabled = true;
 	}	
 	
 	
+	/**
+	 * Purges and closes the current log file.
+	 */
 	public void purgeLogFile() {
 		if (mLoggingEnabled) {
 			if (mLogFormat == LOG_FORMAT_JSON) {
@@ -412,12 +606,18 @@ public class DataOutHandler {
 			mDispatchThread.interrupt();
 			mDispatchThread = null;
 		}
+		
+		mT2AuthDelegate = null;
+		mAuthenticated = false;
 	}
 
 	/**
 	 * Data packet used to accumulate data to be sent using DataOutHandler
 	 * 
-	 * This class encapsulates one JSON object which holds any number of related data
+	 * This class encapsulates objects which hold any number of related data
+	 * 
+	 * Some database might require different formats of data to be sent to them.
+	 * This class encapsulates all the format types
 	 * 
 	 * Note: We use this class instead of just building a JSON packet and sending it
 	 * because AWS doesn't directly accept JSON, it expects a HashMap.
@@ -432,6 +632,10 @@ public class DataOutHandler {
 		public ObjectNode mData;		
 		HashMap<String, AttributeValue> hashMap = new HashMap<String, AttributeValue>();		
 		
+		/**
+		 * Starts out a new packet with specific information (time/date)
+		 * and general information (version, plaltform, application, etc). 
+		 */
 		public DataOutPacket() {
 	    	UUID uuid = UUID.randomUUID();
 	    	Calendar calendar = GregorianCalendar.getInstance();
@@ -441,44 +645,62 @@ public class DataOutHandler {
 	    	String id = currentTime + "-" + uuid.toString();
 
 			if (mLogFormat == LOG_FORMAT_JSON) {
-				mStr = "{" + TIME_STAMP + ":" + currentTime + ",";			
+				mStr = "{" + SHORT_TIME_STAMP + ":" + currentTime + ",";			
 			}
 			else {
-				mStr = TIME_STAMP + ",";			
+				mStr = SHORT_TIME_STAMP + ",";			
 			}
 			
 	    	mData = JsonNodeFactory.instance.objectNode();		
 	    	mItem = JsonNodeFactory.instance.objectNode();		
-	    	mItem.put("record_id", id);
-	    	mItem.put("time_stamp", currentTime);
-	    	mItem.put("created_at", currentTimeString);
-	    	mItem.put("user_id", mUserId);
-	    	mItem.put("session_date", mSessionDate);
+	    	mItem.put(DataOutHandlerTags.RECORD_ID, id);
+	    	mItem.put(DataOutHandlerTags.TIME_STAMP, currentTime);
+	    	mItem.put(DataOutHandlerTags.CREATED_AT, currentTimeString);
+	    	mItem.put(DataOutHandlerTags.USER_ID, mUserId);
+	    	mItem.put(DataOutHandlerTags.SESSION_DATE, mSessionDate);
 	    	if (mSessionIdEnabled) {
-		    	mItem.put("session_id", mSessionId);
+		    	mItem.put(DataOutHandlerTags.SESSION_ID, mSessionId);
 	    	}
-	    	mItem.put("app_name", mAppName);
-	    	mItem.put("data_type", mDataType);
-	    	mItem.put("platform", "Android");		    	
-	    	mItem.put("platform_version", Build.VERSION.RELEASE);		    	
+	    	mItem.put(DataOutHandlerTags.APP_NAME, mAppName);
+	    	mItem.put(DataOutHandlerTags.DATA_TYPE, mDataType);
+	    	mItem.put(DataOutHandlerTags.PLATFORM, "Android");		    	
+	    	mItem.put(DataOutHandlerTags.PLATFORM_VERSION, Build.VERSION.RELEASE);		    	
 	    	
 			if (mDatabaseType == DATABASE_TYPE_AWS) {
 
 				HashMap<String, AttributeValue> hashMap = new HashMap<String, AttributeValue>();
 		    	
-		    	addAttributeWithS("record_id", id);
-		    	addAttributeWithS("time_stamp",String.valueOf(currentTime) );
-		    	addAttributeWithS("created_at",currentTimeString );
-		    	addAttributeWithS("user_id", mUserId);
-		    	addAttributeWithS("session_date", mSessionDate);
-		    	addAttributeWithS("session_id", String.valueOf(mSessionId));
-		    	addAttributeWithS("app_name", mAppName);
-		    	addAttributeWithS("data_type", mDataType);
-		    	addAttributeWithS("platform", "Android");
-		    	addAttributeWithS("platform_version", Build.VERSION.RELEASE);
+		    	addAttributeWithS(DataOutHandlerTags.RECORD_ID, id);
+		    	addAttributeWithS(DataOutHandlerTags.TIME_STAMP,String.valueOf(currentTime) );
+		    	addAttributeWithS(DataOutHandlerTags.CREATED_AT,currentTimeString );
+		    	addAttributeWithS(DataOutHandlerTags.USER_ID, mUserId);
+		    	addAttributeWithS(DataOutHandlerTags.SESSION_DATE, mSessionDate);
+		    	addAttributeWithS(DataOutHandlerTags.SESSION_ID, String.valueOf(mSessionId));
+		    	addAttributeWithS(DataOutHandlerTags.APP_NAME, mAppName);
+		    	addAttributeWithS(DataOutHandlerTags.DATA_TYPE, mDataType);
+		    	addAttributeWithS(DataOutHandlerTags.PLATFORM, "Android");
+		    	addAttributeWithS(DataOutHandlerTags.PLATFORM_VERSION, Build.VERSION.RELEASE);
 			}
 		}
 
+		
+		boolean checkTag(String tag) {
+			boolean found = false;
+			Field[] fields = DataOutHandlerTags.class.getDeclaredFields();
+			for (Field f : fields) {
+			    if (Modifier.isStatic(f.getModifiers())) {
+			    	if (f.getName().equalsIgnoreCase(tag)) {
+				        found = true;
+			    	}
+			    } 
+			}
+			return found;
+		}
+		
+		/**
+		 * @param identifier Data tag
+		 * @param attrVal value to save in the AWS map
+		 */
 		void addAttributeWithS(String identifier, String attrVal) {
 			
 			if (attrVal.equalsIgnoreCase(""))
@@ -488,6 +710,10 @@ public class DataOutHandler {
 			hashMap.put(identifier, attr);			
 		}
 		
+		/**
+		 * @param identifier Data tag
+		 * @param attrVal vector of attribute values
+		 */
 		void addAttributeWithSS(String identifier, Vector attrVal) {
 			
 			if (attrVal.size()== 0)
@@ -498,12 +724,14 @@ public class DataOutHandler {
 		}		
 		
 		/**
-		 * Adds a tag/data pair to the packet
-		 * @param tag
-		 * @param value
+		 * Adds a tag/ data pair to the packet (as double) 
+		 * 
+		 * @param tag Tag to associate with data
+		 * @param value Data to send
 		 */
 		public void add(String tag, double value) {
 			
+			checkTag(tag);			
 			if (mLogFormat == LOG_FORMAT_JSON) {
 				mStr += String.format("%s:%f,", tag,value);
 			}
@@ -518,9 +746,12 @@ public class DataOutHandler {
 		}
 		
 		/**
-		 * Adds a tag/data pair to the packet
-		 * @param tag
-		 * @param value
+		 * Adds a tag/ data pair to the packet (as double) 
+		 * Same as add(String tag, double value) except for the log file
+		 * @param tag Tag to associate with data
+		 * @param value Data to send
+		 * @param format String format to format value with
+		 *  
 		 */
 		public void add(String tag, double value, String format) {
 			
@@ -538,10 +769,12 @@ public class DataOutHandler {
 		}
 		
 		/**
-		 * Adds a tag/data pair to the packet
-		 * @param tag
-		 * @param value
-		 */
+		 * Adds a tag/ data pair to the packet (as long)
+		 *  
+		 * @param tag Tag to associate with data
+		 * @param value Data to send
+		 * 
+		 */		
 		public void add(String tag, long value) {
 			if (mLogFormat == LOG_FORMAT_JSON) {
 				mStr += tag + ":" + value + ",";			
@@ -557,9 +790,11 @@ public class DataOutHandler {
 		}
 
 		/**
-		 * Adds a tag/data pair to the packet
-		 * @param tag
-		 * @param value
+		 * Adds a tag/ data pair to the packet (as int)
+		 *  
+		 * @param tag Tag to associate with data
+		 * @param value Data to send
+		 * 
 		 */
 		public void add(String tag, int value) {
 			if (mLogFormat == LOG_FORMAT_JSON) {
@@ -576,9 +811,11 @@ public class DataOutHandler {
 		}
 
 		/**
-		 * Adds a tag/data pair to the packet
-		 * @param tag
-		 * @param value
+		 * Adds a tag/ data pair to the packet (as String)
+		 *  
+		 * @param tag Tag to associate with data
+		 * @param value Data to send
+		 * 
 		 */
 		public void add(String tag, String value) {
 			if (mLogFormat == LOG_FORMAT_JSON) {
@@ -595,9 +832,11 @@ public class DataOutHandler {
 		}
 		
 		/**
-		 * Adds a tag/data pair to the packet
-		 * @param tag
-		 * @param value
+		 * Adds a tag/ data pair to the packet (as Vector)
+		 *  
+		 * @param tag Tag to associate with data
+		 * @param value Data to send
+		 * 
 		 */
 		public void add(String tag, Vector values) {
 			if (mLogFormat == LOG_FORMAT_JSON) {
@@ -612,17 +851,25 @@ public class DataOutHandler {
 			}			
 				
 		}
-		
+		 
+		/* (non-Javadoc)
+		 * Returns string representation of DataOutPac packet
+		 * @see java.lang.Object#toString()
+		 */
 		public String toString() {
 			return mStr;
 		}
 		
 	}
 
-	// Note - the following two routines are Deprecated. Use 
-	//	DataOutPacket instead of sending a JSON object or array
-	
-	public void handleDataOut(final ObjectNode jsonObject) { // This one uses Android Jackson JSON objects
+	/**
+	 * Use DataOutPacket instead of sending a JSON object or array
+	 * 
+	 * @param jsonObject
+	 * @throws DataOutHandlerException
+	 * @deprecated
+	 */
+	public void handleDataOut(final ObjectNode jsonObject) throws DataOutHandlerException { // This one uses Android Jackson JSON objects
 		DataOutPacket packet = new DataOutPacket();
 		// To match our format we must remove the starting and ending curly brace
 		String tmp = jsonObject.toString();
@@ -635,7 +882,14 @@ public class DataOutHandler {
 	}
 	
 	
-	public void handleDataOut(final ArrayNode jsonArray) {
+	/**
+	 * Use DataOutPacket instead of sending a JSON object or array
+	 *  
+	 * @param jsonArray
+	 * @throws DataOutHandlerException
+	 * @deprecated
+	 */
+	public void handleDataOut(final ArrayNode jsonArray) throws DataOutHandlerException {
 		DataOutPacket packet = new DataOutPacket();
 		// To match our format we must remove the starting and ending curly brace
 		String tmp = jsonArray.toString();
@@ -647,14 +901,20 @@ public class DataOutHandler {
 	}	
 	
 	/**
-	 * Sends a data packet to all configured output sinks
+	 * Sends a data packet to all configured output sinks (Database)
 	 * Actually it just puts it in the mPendingQueue to
 	 * be sent out later 
 	 * 
 	 * @param packet - data Packet to send to output sinks
+	 * @throws DataOutHandlerException 
 	 */
-	public void handleDataOut(final DataOutPacket packet) {
+	public void handleDataOut(final DataOutPacket packet) throws DataOutHandlerException {
+			
 
+		if (mRequiresAuthentication == true && mAuthenticated == false) {
+			throw new DataOutHandlerException("User is not authenticated");
+		}
+		
 		//packet.mItem.put("data", packet.mData);		
 		
 		if (mLogFormat == LOG_FORMAT_JSON) {
@@ -685,12 +945,49 @@ public class DataOutHandler {
 	 * Logs a text note to sinks
 	 * 
 	 * @param note - Text not to log to sinks
+	 * @throws DataOutHandlerException 
 	 */
-	public void logNote(String note) {
+	public void logNote(String note) throws DataOutHandlerException {
 		DataOutPacket packet = new DataOutPacket();
-		packet.add(NOTE, note);
+		packet.add(DataOutHandlerTags.NOTE, note);
 		handleDataOut(packet);				
 	}
+	
+    /**
+     * Sends a specific json string to Drupal database for processing
+     * 
+     * @param jsonString
+     */
+    void drupalNodePut(String jsonString) {
+        UserServices us;
+        us = new UserServices(mServicesClient);
+
+        JsonHttpResponseHandler responseHandler = new JsonHttpResponseHandler() {
+            @Override
+            public void onSuccess(JSONObject response) {
+                try {
+                    String s = response.getString("nid");
+                    Log.d(TAG, "Successfully submitted article # " + s.toString());
+                    
+                } catch (JSONException e) {
+                    Log.e(TAG, e.toString());
+                }
+            }
+
+            @Override
+            public void onFailure(Throwable e, JSONObject response) {
+                Log.e(TAG, e.toString());
+                Log.e("Tag", response.toString());
+            }
+
+            @Override
+            public void onFinish() {
+                Log.d(TAG, "onFinish()");
+            	
+            }
+        };        
+        us.NodePut(jsonString, responseHandler);
+    } 	
 	
 	
 	/**
@@ -749,25 +1046,76 @@ public class DataOutHandler {
 										 
 								}
 								
+								// Note that AWS and DRUPAL send only one packet at a time.
+								// T2REST has the ability to send multiple packets in a JSON array
+								
+
+								if (mDatabaseType == DATABASE_TYPE_T2_DRUPAL) {
+							        // Check to see if we've stored a Drupal session cookie. If so then attach then to 
+							        // the http client
+							        T2CookieStore.getInstance();
+							        Cookie cookie = T2CookieStore.getInstance().getSessionCookie();
+							        if (cookie != null) {
+							        	
+							          mCookieStore.addCookie(cookie);
+							          mServicesClient.setCookieStore(mCookieStore);        
+
+							          // TODO: change to debug - it's at error now simply for readability
+							          Log.e(TAG, "Using session cookie: " + cookie.toString());
+							        }
+							        else {
+							            Log.e(TAG, "No Stored Cookies to use: ");
+							        }   								
+									
+							        JSONObject object;
+							        
+									try {
+										object = (JSONObject) new JSONTokener(packet.mJson).nextValue();
+										mRecordId = object.getString("record_id");
+								        Log.e(TAG, "record_id = " + mRecordId);
+									} catch (JSONException e) {
+										Log.e(TAG, "Badly formed JSON");
+										e.printStackTrace();
+									}
+
+							        
+							        String body = "{\"type\":\"article\"," +
+							          		"\"title\":\"Scott's Article B submitted via JSON REST\"," +
+							          		"\"body\":" +
+							          		"{\"und\":" +
+							          		"[" +
+							          		"{\"value\":" + 
+							          		//    "\"This is the body of the article.\"" + 
+							          		 "{" + 
+								          		"\"record_id\":\"" +     mRecordId + "\"" + 
+							          		 "}" +
+							          		//packet.mJson + 
+							          		"}" +
+							          		"]}}";							       
+							        
+							                drupalNodePut(body);										
+								} // End if (mDatabaseType == DATABASE_TYPE_T2_DRUPAL)
+								
+								
 								if (mDatabaseType == DATABASE_TYPE_AWS) {
-									AmazonDynamoDBClient ddb = DataOutHandler.clientManager
+									AmazonDynamoDBClient ddb = DataOutHandler.sClientManager
 											.ddb();
 									try {
 										
 										PutItemRequest request = new PutItemRequest().withTableName(
-												PropertyLoader.getInstance().getTestTableName())
+												mAwsTableName)
 												.withItem(packet.hashMap);
 
 										ddb.putItem(request);
 										Log.d(TAG, "AWS Posting Successful: ");
 										
 									} catch (AmazonServiceException ex) {
-										DataOutHandler.clientManager
+										DataOutHandler.sClientManager
 												.wipeCredentialsOnAuthError(ex);
 										Log.d(TAG, "Error posting document " + ex.toString());
 									}	
 									catch (Exception ex) {
-										DataOutHandler.clientManager.clearCredentials();
+										DataOutHandler.sClientManager.clearCredentials();
 										Log.d(TAG, "Error posting document " + ex.toString());
 									}									
 								}
@@ -788,10 +1136,6 @@ public class DataOutHandler {
 						        });	
 							}							
 
-//							if (databaseType == DatabaseType.T2_CAS) {
-//								sendViaCas(jsonString);
-//							}							
-					        
 							mPendingQueue.clear();
 						} // End if (mPendingQueue.size() > 0)
 					} // End synchronized(mPendingQueue) 
@@ -801,12 +1145,19 @@ public class DataOutHandler {
 			isRunning = false;
 		} // End public void run() 
 		
+		/**
+		 * Cancel the loop
+		 */
 		public void cancel() {
 			this.cancelled = true;
 			Log.e(TAG, "Cancelled");
 			
 		}
 		
+		/**
+		 * 
+		 * @return true if running false otherwise
+		 */
 		public boolean isRunning() {
 			return this.isRunning;
 		}
@@ -825,59 +1176,102 @@ public class DataOutHandler {
             return true;
         }
         return false;
-    } 	
-	
-//	private void sendViaCas(final String entry) {
-//
-//		Log.d(TAG, "Sending via cas:  " + entry);
-//
-//        if (mServiceTicketTask != null) {
-//            return;
-//        }
-//		
-//		// First we need to get a service ticket, then do the actual send
-//		mServiceTicketTask = new T2ServiceTicketTask(AuthUtils.APPLICATION_NAME,
-//                AuthUtils.getTicketGrantingTicket(mContext),
-//                AuthUtils.getSslContext(mContext).getSocketFactory()) {
-//            @Override
-//            protected void onTicketRequestSuccess(String serviceTicket) {
-//                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mContext);
-//                prefs.edit().putString(mContext.getString(R.string.pref_st), serviceTicket).commit();
-//
-//                mServiceTicketTask = null;
-//				Log.d(TAG, "TicketRequest Success: ");
-//
-//                mPostEntryTask = new H2PostEntryTask(AuthUtils.getServiceTicket(mContext), entry) {
-//
-//					@Override
-//					protected void onPostSuccess(String response) {
-//						Log.d(TAG, "Posting Successful: " + response);
-//						
-//					}
-//
-//					@Override
-//					protected void onPostFailed() {
-//						
-//					}
-//                	
-//                };                
-//                mPostEntryTask.execute((Void) null);
-//            }
-//
-//            @Override
-//            protected void onTicketRequestFailed() {
-//                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mContext);
-//                prefs.edit().remove(mContext.getString(R.string.pref_tgt)).commit();
-//                
-//                mServiceTicketTask = null;
-//            }
-//
-//            @Override
-//            protected void onCancelled() {
-//                super.onCancelled();
-//                mServiceTicketTask = null;
-//            }
-//        };
-//        mServiceTicketTask.execute((Void) null);		
-//	}
+    }
+
+    // JanRain Delegates (status callbacks)
+    
+    
+	@Override
+	public void jrAuthenticationDidSucceedForUser(JRDictionary auth_info,
+			String provider) {
+		Log.d(TAG, "jrAuthenticationDidSucceedForUser");		
+		
+		// Note, if we're using drupal the authentication isn't 
+		// really done until the callback URL has been called
+		// This sets up the Drupal Database
+		if (mDatabaseType == DATABASE_TYPE_T2_DRUPAL) {
+			
+		} else {
+		    mAuth_info = auth_info;
+			mAuthProvider = provider;		
+			mAuthenticated = true;
+			
+			if (mT2AuthDelegate != null) {
+				mT2AuthDelegate.T2AuthSuccess(mAuth_info, mAuthProvider, null, null);
+			}
+		}
+	}
+
+	@Override
+	public void jrAuthenticationDidReachTokenUrl(String tokenUrl,
+			HttpResponseHeaders responseHeaders,String responsePayload,
+			String provider) {
+		Log.d(TAG, "jrAuthenticationDidReachTokenUrl");		
+
+		mAuthenticated = true;
+		if (mT2AuthDelegate != null) {
+			mT2AuthDelegate.T2AuthSuccess(mAuth_info, mAuthProvider, responseHeaders, responsePayload);
+		}
+	}
+
+	@Override
+	public void jrSocialDidPublishJRActivity(JRActivityObject activity,
+			String provider) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void jrSocialDidCompletePublishing() {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void jrEngageDialogDidFailToShowWithError(JREngageError error) {
+		Log.d(TAG, "jrEngageDialogDidFailToShowWithError");		
+
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void jrAuthenticationDidNotComplete() {
+		Log.d(TAG, "jrAuthenticationDidNotComplete");		
+		
+	}
+
+	@Override
+	public void jrAuthenticationDidFailWithError(JREngageError error,
+			String provider) {
+		Log.d(TAG, "jrAuthenticationDidFailWithError");		
+		mAuthenticated = false;
+		
+		if (mT2AuthDelegate != null) {
+			mT2AuthDelegate.T2AuthFail(error, provider);
+		}		
+	}
+
+	@Override
+	public void jrAuthenticationCallToTokenUrlDidFail(String tokenUrl,
+			JREngageError error, String provider) {
+		Log.d(TAG, "jrAuthenticationCallToTokenUrlDidFail");		
+		mAuthenticated = false;
+		if (mT2AuthDelegate != null) {
+			mT2AuthDelegate.T2AuthFail(error, provider);
+		}		
+	}
+
+	@Override
+	public void jrSocialDidNotCompletePublishing() {
+		if (mT2AuthDelegate != null) {
+			mT2AuthDelegate.T2AuthNotCompleted();
+		}		
+	}
+
+	@Override
+	public void jrSocialPublishJRActivityDidFail(JRActivityObject activity,
+			JREngageError error, String provider) {
+		// TODO Auto-generated method stub
+	} 	
 }

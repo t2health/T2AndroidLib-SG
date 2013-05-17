@@ -93,7 +93,11 @@ public class ExampleUsageActivity extends Activity {
 		
 		// Initialize (and enable) the database
 		Log.d(TAG, "Initializing database at " + mRemoteDatabaseUri);
-		mDataOutHandler.initializeDatabase("","","","", mRemoteDatabaseUri);
+		try {
+			mDataOutHandler.initializeDatabase("","","","", mRemoteDatabaseUri);
+		} catch (DataOutHandlerException e1) {
+			e1.printStackTrace();
+		}
 		
 		// Log the version
 		try {
