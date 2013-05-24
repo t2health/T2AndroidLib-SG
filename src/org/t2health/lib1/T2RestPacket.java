@@ -32,6 +32,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import com.amazonaws.services.dynamodb.model.AttributeValue;
+import com.t2.aws.Constants;
 
 import android.util.Log;
 
@@ -50,45 +51,57 @@ public class T2RestPacket {
 	public String mId = "nothing";
 	public String mJson;
 	public int mStatus;
-	HashMap<String, AttributeValue> hashMap = new HashMap<String, AttributeValue>();		
+	HashMap<String, AttributeValue> mHashMap = new HashMap<String, AttributeValue>();		
 	
 	T2RestPacket(String json) {
 		mJson = json;
 		mStatus = STATUS_PENDING;
-		
+
+		// This is a hokey way to getting the record id!
+		// It might present itself differently depending on the database type
 		Pattern p = Pattern.compile("\"record_id\":\"[0-9a-zA-Z-]*\"");
 		Matcher m = p.matcher(json);	
 		if (m.find()) {
 			mId = m.group(0);
 		}
 		
-		// This is a hokey way to getting the record id!
 		p = Pattern.compile("\"title\":\"[0-9a-zA-Z-]*\"");
 		m = p.matcher(json);	
 		if (m.find()) {
 			mId = m.group(0);
 		}
 		
+		AttributeValue recordId =  mHashMap.get("record_id");
+		
+		if (recordId != null) {
+			mId = recordId.getS();
+		}
 	}
 	
 	T2RestPacket(String json, HashMap<String, AttributeValue> _hashMap) {
 		mJson = json;
 		mStatus = STATUS_PENDING;
 		
-		hashMap = _hashMap;
+		mHashMap = _hashMap;
+		
+		// This is a hokey way to getting the record id!
+		// It might present itself differently depending on the database type
 		Pattern p = Pattern.compile("\"record_id\":\"[0-9a-zA-Z-]*\"");
 		Matcher m = p.matcher(json);	
 		if (m.find()) {
 			mId = m.group(0);
 		}
 
-		// This is a hokey way to getting the record id!
 		p = Pattern.compile("\"title\":\"[0-9a-zA-Z-]*\"");
 		m = p.matcher(json);	
 		if (m.find()) {
 			mId = m.group(0);
 		}
+		
+		AttributeValue recordId =  mHashMap.get("record_id");
+		
+		if (recordId != null) {
+			mId = recordId.getS();
+		}
 	}
-	
-
 }

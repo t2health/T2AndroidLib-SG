@@ -1079,6 +1079,9 @@ public class DataOutHandler implements JREngageDelegate {
 		if (mRequiresAuthentication == true && mAuthenticated == false) {
 			throw new DataOutHandlerException("User is not authenticated");
 		}
+		int i = 0;
+		i++;
+		
 		
 		//packet.mItem.put("data", packet.mData);		
 		
@@ -1246,7 +1249,7 @@ public class DataOutHandler implements JREngageDelegate {
 										
 										PutItemRequest request = new PutItemRequest().withTableName(
 												mAwsTableName)
-												.withItem(packet.hashMap);
+												.withItem(packet.mHashMap);
 
 										ddb.putItem(request);
 										Log.d(TAG, "AWS Posting Successful: ");
