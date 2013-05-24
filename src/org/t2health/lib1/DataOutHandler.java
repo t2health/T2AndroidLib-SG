@@ -42,7 +42,9 @@ import java.util.TimeZone;
 import java.util.UUID;
 import java.util.Vector;
 
+import org.apache.http.client.CookieStore;
 import org.apache.http.cookie.Cookie;
+import org.apache.http.impl.client.DefaultHttpClient;
 import org.codehaus.jackson.node.ArrayNode;
 import org.codehaus.jackson.node.JsonNodeFactory;
 import org.codehaus.jackson.node.ObjectNode;
@@ -608,6 +610,8 @@ public class DataOutHandler implements JREngageDelegate {
 	 */
 	public void close() {
 
+		mServicesClient.mAsyncHttpClient.cancelRequests(mContext, true);
+		
 		Log.e(TAG, " ***********************************closing ******************************");
 		if (mLoggingEnabled) {
 			if (mLogFormat == LOG_FORMAT_JSON) {
@@ -1217,6 +1221,7 @@ public class DataOutHandler implements JREngageDelegate {
 							        T2CookieStore.getInstance();
 							        Cookie cookie = T2CookieStore.getInstance().getSessionCookie();
 							        if (cookie != null) {
+							        	
 							        	
 							          mCookieStore.addCookie(cookie);
 							          mServicesClient.setCookieStore(mCookieStore);        

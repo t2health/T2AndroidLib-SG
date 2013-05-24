@@ -61,6 +61,14 @@ public class T2RestPacket {
 		if (m.find()) {
 			mId = m.group(0);
 		}
+		
+		// This is a hokey way to getting the record id!
+		p = Pattern.compile("\"title\":\"[0-9a-zA-Z-]*\"");
+		m = p.matcher(json);	
+		if (m.find()) {
+			mId = m.group(0);
+		}
+		
 	}
 	
 	T2RestPacket(String json, HashMap<String, AttributeValue> _hashMap) {
@@ -70,6 +78,13 @@ public class T2RestPacket {
 		hashMap = _hashMap;
 		Pattern p = Pattern.compile("\"record_id\":\"[0-9a-zA-Z-]*\"");
 		Matcher m = p.matcher(json);	
+		if (m.find()) {
+			mId = m.group(0);
+		}
+
+		// This is a hokey way to getting the record id!
+		p = Pattern.compile("\"title\":\"[0-9a-zA-Z-]*\"");
+		m = p.matcher(json);	
 		if (m.find()) {
 			mId = m.group(0);
 		}

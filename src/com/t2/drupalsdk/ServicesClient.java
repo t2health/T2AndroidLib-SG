@@ -8,11 +8,13 @@ import com.loopj.android.http.PersistentCookieStore;
 import com.loopj.android.http.RequestParams;
 
 import org.apache.http.client.CookieStore;
+import org.apache.http.client.protocol.ClientContext;
 import org.apache.http.cookie.Cookie;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.protocol.HTTP;
+import org.apache.http.protocol.HttpContext;
 import org.json.JSONObject;
 
 import java.io.*;
@@ -36,6 +38,8 @@ public class ServicesClient {
     }
 
     public void setCookieStore(PersistentCookieStore cookieStore) {
+    	Log.e("ServicesClient", " set cookie store in " + mAsyncHttpClient.toString());
+    	Log.e("ServicesClient", " set cookie store in " + mAsyncHttpClient.getHttpClient().toString());
         mAsyncHttpClient.setCookieStore(cookieStore);
     }
 
@@ -62,13 +66,11 @@ public class ServicesClient {
         Log.d(TAG, se.toString());
         Log.d(TAG, "url = " + getAbsoluteUrl(url));
         
-        DefaultHttpClient  internalHttpClient = (DefaultHttpClient) mAsyncHttpClient.getHttpClient();
-        CookieStore store = internalHttpClient.getCookieStore();
-
-        // TODO: change to debug - it's at error now simply for readability
-        Log.e(TAG, "Cookies for AsyncClient = " + store.toString());       
+//        // TODO: change to debug - it's at error now simply for readability
+//        HttpContext context = mAsyncHttpClient.getHttpContext();
+//        CookieStore store1 = (CookieStore) context.getAttribute(ClientContext.COOKIE_STORE);
+//        Log.e(TAG, "Cookies for AsyncClient = " + store1.getCookies().toString());       
         
-
 
         mAsyncHttpClient.post(null, getAbsoluteUrl(url), se, "application/json", responseHandler);
     }
