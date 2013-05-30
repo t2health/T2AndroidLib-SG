@@ -19,7 +19,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.t2health.lib1.DataOutHandler;
 
 import android.util.Log;
 
@@ -45,6 +44,7 @@ import com.amazonaws.services.dynamodb.model.ScalarAttributeType;
 import com.amazonaws.services.dynamodb.model.ScanRequest;
 import com.amazonaws.services.dynamodb.model.ScanResult;
 import com.amazonaws.services.dynamodb.model.UpdateItemRequest;
+import com.t2.dataouthandler.DataOutHandler;
 
 public class DynamoDBManager {
 

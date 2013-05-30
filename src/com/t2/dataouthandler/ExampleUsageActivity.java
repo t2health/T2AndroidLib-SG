@@ -25,13 +25,16 @@
  * Government Agency Point of Contact for Original Software: robert.kayl2@us.army.mil
  * 
  */
-package org.t2health.lib1;
+package com.t2.dataouthandler;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 
-import org.t2health.lib1.DataOutHandler.DataOutPacket;
+import org.t2health.lib1.SharedPref;
+
+import com.t2.dataouthandler.DataOutHandler.DataOutPacket;
+
 
 import android.app.Activity;
 import android.content.pm.PackageInfo;
