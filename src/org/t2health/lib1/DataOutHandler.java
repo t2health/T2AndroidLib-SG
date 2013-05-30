@@ -550,6 +550,14 @@ public class DataOutHandler implements JREngageDelegate {
 	}
 	
 	/**
+	 * Cancells authentication
+	 */
+	public void logOut() {
+		mAuthenticated = false;
+	}
+	
+	
+	/**
 	 *  Enables logging to external log file of entries sent to the database
 	 *  
 	 * @param context	Calling party's context
@@ -595,7 +603,7 @@ public class DataOutHandler implements JREngageDelegate {
 	 * Purges and closes the current log file.
 	 */
 	public void purgeLogFile() {
-		if (mLoggingEnabled) {
+		if (mLoggingEnabled && mLogWriter != null) {
 			if (mLogFormat == LOG_FORMAT_JSON) {
 				mLogWriter.write("],}");
 			}
@@ -613,7 +621,7 @@ public class DataOutHandler implements JREngageDelegate {
 		mServicesClient.mAsyncHttpClient.cancelRequests(mContext, true);
 		
 		Log.e(TAG, " ***********************************closing ******************************");
-		if (mLoggingEnabled) {
+		if (mLoggingEnabled && mLogWriter != null) {
 			if (mLogFormat == LOG_FORMAT_JSON) {
 				mLogWriter.write("],}");
 			}

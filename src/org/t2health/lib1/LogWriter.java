@@ -110,14 +110,16 @@ public class LogWriter {
 	
 	public void close() {
     	try {
-        	if (mLogWriter != null)
+        	if (mLogWriter != null) {
         		Log.d(TAG, "Closing file");
         		mLogWriter.close();
+        		mLogWriter = null;
+        	}
 		} catch (IOException e) {
 			Log.e(TAG, "Exeption closing file " + e.toString());
 			e.printStackTrace();
+			mLogWriter = null;
 		}    		
-		mLogWriter = null;
 	}
 
 	public void write(String line) {
