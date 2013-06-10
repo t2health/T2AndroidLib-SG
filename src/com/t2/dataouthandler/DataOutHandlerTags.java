@@ -115,4 +115,37 @@ public class DataOutHandlerTags {
 	public static final String DATA_TYPE = "data_type";
 	public static final String PLATFORM = "platform";
 	public static final String PLATFORM_VERSION = "platform_version";
+	
+	public static final String USER_EMAIL = "user_email";
+	public static final String DRUG_NAME = "drug_name";
+	public static final String DRUG_FORM = "drug_form";
+	public static final String DRUG_DOSAGE = "drug_dosage";
+	public static final String DRUG_REASUN = "drug_reason";
+	public static final String DRUG_WARNINGS = "drug_warnings";
+	public static final String DRUG_NOTES = "drug_notes";
+
+	public static final String USERMED = "usermed";
+	public static final String NOTIFICATION_ENABLED = "notificationenabled";
+	public static final String REPEATING_COUNT = "repeatingcount";
+	public static final String NOTIFICATION_MINUTES = "notificationminutes";
+	public static final String AS_NEEDED = "AsNeeded";
+	public static final String STATIC_TIME = "StaticTime";
+	public static final String DAY_OF_WEEK = "DayOfWeek";
+	public static final String HOUR_OF_DAY = "HourOfDay";
+	public static final String MINUTE_OF_DAY = "MinuteOfDay";
+
+	public static final String NAME = "name";
+	public static final String PASSWORD = "password";
+
+	
+	public static final String TRANSACTION_TYPE = "transaction_type";
+	public static final String ADD_USER = "add_user";
+	public static final String ADD_DRUG = "add_drug";
+	public static final String UPDATE_DRUG = "update_drug";
+	public static final String DELETE_DRUG = "delete_drug";
+	public static final String ADD_TIME_USER_SCHDEULE = "add_time_user_schdeule";
+	public static final String ADD_REMINDER_USER_MED = "add_reminder_user_med";
+	
+	
+	
 }

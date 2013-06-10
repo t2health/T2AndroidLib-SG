@@ -1133,7 +1133,20 @@ public class DataOutHandler  implements JREngageDelegate {
         }
         return false;
     }	
-	
+
+	/**
+	 * Logs a text note to sinks
+	 * 
+	 * @param note - Text not to log to sinks
+	 * @throws DataOutHandlerException 
+	 */
+	public void logNote(String note) throws DataOutHandlerException {
+		DataOutPacket packet = new DataOutPacket();
+		packet.add(DataOutHandlerTags.NOTE, note);
+		handleDataOut(packet);				
+	}
+    
+    
     // JanRain Delegates (status callbacks)
     
     

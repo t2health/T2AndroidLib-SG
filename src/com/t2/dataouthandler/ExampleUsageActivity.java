@@ -33,7 +33,7 @@ import java.util.Locale;
 
 import org.t2health.lib1.SharedPref;
 
-import com.t2.dataouthandler.DataOutHandler.DataOutPacket;
+
 
 
 import android.app.Activity;
@@ -110,7 +110,8 @@ public class ExampleUsageActivity extends Activity {
 			String versionString = mAppId + 
 					" application version: " + applicationVersion;
 
-			DataOutPacket packet = mDataOutHandler.new DataOutPacket();
+			
+			DataOutPacket packet = new DataOutPacket();			
 			packet.add("version", versionString);
 			mDataOutHandler.handleDataOut(packet);				
 
@@ -124,7 +125,7 @@ public class ExampleUsageActivity extends Activity {
 
 		// Log an arbitrary piece of data
 		if (mDataOutHandler != null) {
-			DataOutPacket packet = mDataOutHandler.new DataOutPacket();
+			DataOutPacket packet = new DataOutPacket();			
 			packet.add("MODEL", model);		
 		}
 	}
