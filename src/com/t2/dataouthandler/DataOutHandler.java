@@ -1,65 +1,35 @@
-/* T2AndroidLib-SG for Signal Processing
- * 
- * Copyright © 2009-2012 United States Government as represented by 
- * the Chief Information Officer of the National Center for Telehealth 
- * and Technology. All Rights Reserved.
- * 
- * Copyright © 2009-2012 Contributors. All Rights Reserved. 
- * 
- * THIS OPEN SOURCE AGREEMENT ("AGREEMENT") DEFINES THE RIGHTS OF USE, 
- * REPRODUCTION, DISTRIBUTION, MODIFICATION AND REDISTRIBUTION OF CERTAIN 
- * COMPUTER SOFTWARE ORIGINALLY RELEASED BY THE UNITED STATES GOVERNMENT 
- * AS REPRESENTED BY THE GOVERNMENT AGENCY LISTED BELOW ("GOVERNMENT AGENCY"). 
- * THE UNITED STATES GOVERNMENT, AS REPRESENTED BY GOVERNMENT AGENCY, IS AN 
- * INTENDED THIRD-PARTY BENEFICIARY OF ALL SUBSEQUENT DISTRIBUTIONS OR 
- * REDISTRIBUTIONS OF THE SUBJECT SOFTWARE. ANYONE WHO USES, REPRODUCES, 
- * DISTRIBUTES, MODIFIES OR REDISTRIBUTES THE SUBJECT SOFTWARE, AS DEFINED 
- * HEREIN, OR ANY PART THEREOF, IS, BY THAT ACTION, ACCEPTING IN FULL THE 
- * RESPONSIBILITIES AND OBLIGATIONS CONTAINED IN THIS AGREEMENT.
- * 
- * Government Agency: The National Center for Telehealth and Technology
- * Government Agency Original Software Designation: T2AndroidLib1021
- * Government Agency Original Software Title: T2AndroidLib for Signal Processing
- * User Registration Requested. Please send email 
- * with your contact information to: robert.kayl2@us.army.mil
- * Government Agency Point of Contact for Original Software: robert.kayl2@us.army.mil
- * 
- */
 package com.t2.dataouthandler;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.Date;
-import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
-import java.util.TimeZone;
-import java.util.UUID;
+import java.util.Map;
 import java.util.Vector;
 
-import org.apache.http.client.CookieStore;
 import org.apache.http.cookie.Cookie;
-import org.apache.http.impl.client.DefaultHttpClient;
 import org.codehaus.jackson.node.ArrayNode;
 import org.codehaus.jackson.node.JsonNodeFactory;
 import org.codehaus.jackson.node.ObjectNode;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.json.JSONTokener;
 import org.t2health.lib1.LogWriter;
 
+import android.app.Activity;
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.os.AsyncTask;
+import android.preference.PreferenceManager;
+import android.util.Log;
+
 import com.amazonaws.AmazonServiceException;
-import com.t2.aws.Constants;
-import com.t2.aws.DynamoDBManager;
-import com.t2.aws.PropertyLoader;
-import com.t2.drupalsdk.ServicesClient;
-import com.t2.drupalsdk.UserServices;
-//import com.t2.drupalsdk.ServicesClient;
 import com.amazonaws.services.dynamodb.AmazonDynamoDBClient;
 import com.amazonaws.services.dynamodb.model.AttributeValue;
 import com.amazonaws.services.dynamodb.model.PutItemRequest;
@@ -75,52 +45,18 @@ import com.loopj.android.http.AsyncHttpResponseHandler;
 import com.loopj.android.http.JsonHttpResponseHandler;
 import com.loopj.android.http.PersistentCookieStore;
 import com.loopj.android.http.RequestParams;
+import com.t2.aws.DynamoDBManager;
+import com.t2.dataouthandler.DataOutHandler;
+import com.t2.dataouthandler.DataOutHandlerException;
+import com.t2.dataouthandler.DataOutHandlerTags;
+import com.t2.dataouthandler.T2AuthDelegate;
+import com.t2.dataouthandler.T2RestClient;
+import com.t2.dataouthandler.T2RestPacket;
+import com.t2.drupalsdk.ServicesClient;
+import com.t2.drupalsdk.UserServices;
 
-import android.app.Activity;
-import android.app.ProgressDialog;
-import android.content.Context;
-import android.content.SharedPreferences;
-import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager;
-import android.net.ConnectivityManager;
-import android.net.NetworkInfo;
-import android.os.AsyncTask;
-import android.os.Build;
-import android.preference.PreferenceManager;
-import android.util.Log;
-import android.view.View;
-
-/**
- * Handles distribution of processed Biometric data
- *   Using DataOutHandler relieves the calling activity of the burden of knowing
- *   where to sent it's data.
- *   
- *   There are three features to this library:
- *   1. Serves as a LogCat output generator (if mLogCatEnabled == true).
- *   2. Serves as a data file output mechanism: (mLoggingEnabled == true, 
- *      log file based on mUserId + "_" + mSessionDate.
- *      These log files are saved to the android device file system.
- *   3. Serves as an external database router. Sends data to which ever database
- *      is enabled (mDatabaseType).
- *   
- *   This class is used to encapsulate all of the database particulars 
- *   from the calling activity
- *   
- *   
- *   Currently log data may be stored stored in one of two formats:
- *   Text (mStr) for output to log files
- *   JSON format (mItem) for output to TouchDB
- *   
- *   Potentially these should be merged into one but right now it's 
- *   separate because we don't want as much cluttering up log files.
- * 
- * @author scott.coleman
- *
- */
-public class DataOutHandler implements JREngageDelegate {
-	
+public class DataOutHandler  implements JREngageDelegate {
 	private final String TAG = getClass().getName();	
-
 	//private static final String DEFAULT_REST_DB_URL = "http://gap.t2health.org/and/phpWebservice/webservice2.php";	 
 	// private static final String DEFAULT_REST_DB_URL = "http://gap.t2health.org/and/json.php";	 
 	private static final String DEFAULT_REST_DB_URL = "http://ec2-50-112-197-66.us-west-2.compute.amazonaws.com/mongo/json.php";
@@ -142,6 +78,7 @@ public class DataOutHandler implements JREngageDelegate {
 	public static final String DATA_TYPE_RATING = "RatingData";
 	public static final String DATA_TYPE_INTERNAL_SENSOR = "InternalSensor";
 	public static final String DATA_TYPE_EXTERNAL_SENSOR = "ExternalSensor";
+	public static final String DATA_TYPE_USER_ENTERED_DATA = "UserEnteredData";
 	
 	public boolean mLogCatEnabled = false;	
 	public boolean mLoggingEnabled = false;	
@@ -192,13 +129,8 @@ public class DataOutHandler implements JREngageDelegate {
 	/**
 	 * URL of the remote database we are saving to
 	 */
-	String mRemoteDatabase;
-
-	/**
-	 * Queue for Rest packets waiting to be sent via HTTP
-	 */
-	List<T2RestPacket> mPendingQueue;
-
+	String mRemoteDatabase;	
+	
 	/**
 	 * Thread used to communicate messages in mPendingQueue to server
 	 */
@@ -246,17 +178,24 @@ public class DataOutHandler implements JREngageDelegate {
      * The provider the user used to authenticate with (provided by JanRain)
      */
     private String mAuthProvider;	
-
+	
+	
+	
     /**
 	 * True if JanRain has successfully authenticated a user. 
 	 */
 	private boolean mAuthenticated = false;
-
+	
 	/**
-	 * Most recently sent record id
+	 * Set this to true to require authtication for all database puts. 
 	 */
-	private String mRecordId;
-    
+	private boolean mRequiresAuthentication = true;	
+	
+	/**
+	 * Queue for Rest packets waiting to be sent via HTTP
+	 */
+	List<DataOutPacket> mPendingQueue;	
+	
 	/**
 	 * Database manager when sending data to external Amazon database
 	 */
@@ -276,8 +215,8 @@ public class DataOutHandler implements JREngageDelegate {
 	/**
 	 * sets which type of external database is setup and used
 	 */
-	private int mDatabaseType;
-
+	private int mDatabaseType;	
+	
 	/**
 	 * Sets the AWS table name into which data is stored (AWS only)
 	 */
@@ -286,21 +225,13 @@ public class DataOutHandler implements JREngageDelegate {
 	/**
 	 * Shared preferences for this lib (will be the same as calling party)
 	 */
-	SharedPreferences mSharedPreferences;
+	SharedPreferences mSharedPreferences;	
 	
 	/**
-	 * Set this to true to require authtication for all database puts. 
+	 * Static instance of this class
 	 */
-	private boolean mRequiresAuthentication = true;
+	private static DataOutHandler sDataOutHandler;	
 	
-	/**
-	 * Sets  the RequiresAuthentication flag 
-	 * @param mRequiresAuthentication true/false
-	 */
-	public void setRequiresAuthentication(boolean mRequiresAuthentication) {
-		this.mRequiresAuthentication = mRequiresAuthentication;
-	}
-
 	/**
 	 * Sets the AWS table name (applicable only if AWS database is chosen)
 	 * @param awsTableName Name of the table
@@ -308,6 +239,25 @@ public class DataOutHandler implements JREngageDelegate {
 	public void setAwsTableName(String awsTableName) {
 		this.mAwsTableName = awsTableName;
 	}	
+	
+	public synchronized static DataOutHandler getInstance(Context context, String userId, String sessionDate, String appName, String dataType, long sessionId) {
+		if (sDataOutHandler == null) {
+			sDataOutHandler = new DataOutHandler(context, userId, sessionDate, appName, dataType, sessionId);
+		}
+		
+		return sDataOutHandler;
+	}
+	
+	public static DataOutHandler getInstance() throws DataOutHandlerException {
+		if (sDataOutHandler == null) {
+			throw new DataOutHandlerException("DataOutHandler has not been initialized");
+		}
+		
+		return sDataOutHandler;
+	}		
+	
+	
+	
 	
 	/**
 	 * Constructor. Sets up context and user/session parameters
@@ -358,6 +308,18 @@ public class DataOutHandler implements JREngageDelegate {
 	public void enableDatabase() {
 		mDatabaseEnabled = true;
 	}
+	
+	/**
+	 * Sets formatting of log output
+	 * 	LOG_FORMAT_JSON = 1; JSON format	
+	 *  LOG_FORMAT_FLAT = 2; Standard column format
+	 * 
+	 * @param format - format to use
+	 */
+	public void setLogFormat(int format) {
+		mLogFormat = format;		
+	}
+	
 			
 	/**
 	 * @author scott.coleman
@@ -383,8 +345,14 @@ public class DataOutHandler implements JREngageDelegate {
 	    	Log.d(TAG, "Database status = " + status);
 	    }
 	 }	
-
-
+	
+	/**
+	 * Sets  the RequiresAuthentication flag 
+	 * @param mRequiresAuthentication true/false
+	 */
+	public void setRequiresAuthentication(boolean mRequiresAuthentication) {
+		this.mRequiresAuthentication = mRequiresAuthentication;
+	}	
 	/**
 	 * Initialized specified database
 	 * 
@@ -487,8 +455,12 @@ public class DataOutHandler implements JREngageDelegate {
 				//	clientManager = new AmazonClientManager(mContext.getSharedPreferences("com.amazon.aws.demo.AWSDemo", Context.MODE_PRIVATE), mRemoteDatabase);	
 				sClientManager = new AmazonClientManager(mSharedPreferences, mRemoteDatabase);	
 				// TBD - we should probably check the table status
-				//new CheckTableStatusTask().execute("");				
-			}
+				//new CheckTableStatusTask().execute("");			
+				
+				int i = 0;
+				i++;
+			}			
+			
 		}
 		else if (databaseTypeString.equalsIgnoreCase("T2REST")) {
 			Log.d(TAG, "Using T2 Rest Database type");
@@ -504,7 +476,8 @@ public class DataOutHandler implements JREngageDelegate {
 				
 		        mEngage = JREngage.initInstance(mContext, mEngageAppId, mEngageTokenUrl, this);
 		        JREngage.blockOnInitialization();
-			}			
+			}				
+			
 		}
 		else if (databaseTypeString.equalsIgnoreCase("T2DRUPAL")) {
 			Log.d(TAG, "Using T2 Drupal Database type");
@@ -523,7 +496,8 @@ public class DataOutHandler implements JREngageDelegate {
 
 		        mServicesClient = new ServicesClient(mRemoteDatabase);
 		        mCookieStore = new PersistentCookieStore(mContext);    
-			}
+			}			
+
 		}
 		
 		// Make sure a valid database was selected
@@ -534,11 +508,11 @@ public class DataOutHandler implements JREngageDelegate {
 		// Now do any global database (ot other)  initialization
 		Log.d(TAG, "Initializing T2 database dispatcher");
 		Log.d(TAG, "Remote database name = " + mRemoteDatabase);
-		mPendingQueue = new ArrayList<T2RestPacket>();		
+		mPendingQueue = new ArrayList<DataOutPacket>();		
 		mDispatchThread = new DispatchThread();
 		mDispatchThread.start();		
-	}		
-
+	}			
+	
 	/**
 	 * Displays authentication dialog and takes the user through
 	 * the entire authentication process.
@@ -637,102 +611,360 @@ public class DataOutHandler implements JREngageDelegate {
 		mT2AuthDelegate = null;
 		mAuthenticated = false;
 	}
-
 	/**
-	 * Data packet used to accumulate data to be sent using DataOutHandler
+	 * Sends a data packet to all configured output sinks (Database)
+	 * Actually it just puts it in the mPendingQueue to
+	 * be sent out later 
 	 * 
-	 * This class encapsulates objects which hold any number of related data
-	 * 
-	 * Some database might require different formats of data to be sent to them.
-	 * This class encapsulates all the format types
-	 * 
-	 * Note: We use this class instead of just building a JSON packet and sending it
-	 * because AWS doesn't directly accept JSON, it expects a HashMap.
-	 * 
-	 * @author scott.coleman
-	 *
+	 * @param packet - data Packet to send to output sinks
+	 * @throws DataOutHandlerException 
 	 */
-	public class DataOutPacket {
-		
-		public String mStr = "";
-		public ObjectNode mItem;		
-		public ObjectNode mData;		
-		HashMap<String, AttributeValue> hashMap = new HashMap<String, AttributeValue>();		
-		
-		/**
-		 * Starts out a new packet with specific information (time/date)
-		 * and general information (version, plaltform, application, etc). 
-		 */
-		public DataOutPacket() {
-	    	UUID uuid = UUID.randomUUID();
-	    	Calendar calendar = GregorianCalendar.getInstance();
-	    	long currentTime = calendar.getTimeInMillis();
-	    	dateFormatter.setTimeZone(TimeZone.getTimeZone("UTC"));
-	        String currentTimeString = dateFormatter.format(calendar.getTime());
-	    	String id = currentTime + "-" + uuid.toString();
-
-			if (mLogFormat == LOG_FORMAT_JSON) {
-				mStr = "{" + SHORT_TIME_STAMP + ":" + currentTime + ",";			
-			}
-			else {
-				mStr = SHORT_TIME_STAMP + ",";			
-			}
+	public void handleDataOut(final DataOutPacket packet) throws DataOutHandlerException {
 			
-	    	mData = JsonNodeFactory.instance.objectNode();		
-	    	mItem = JsonNodeFactory.instance.objectNode();		
-	    	
-	    	
-			if (mDatabaseType == DATABASE_TYPE_AWS) {
 
-				HashMap<String, AttributeValue> hashMap = new HashMap<String, AttributeValue>();
-		    	
-		    	addAttributeWithS(DataOutHandlerTags.RECORD_ID, id);
-		    	addAttributeWithS(DataOutHandlerTags.TIME_STAMP,String.valueOf(currentTime) );
-		    	addAttributeWithS(DataOutHandlerTags.CREATED_AT,currentTimeString );
-		    	addAttributeWithS(DataOutHandlerTags.USER_ID, mUserId);
-		    	addAttributeWithS(DataOutHandlerTags.SESSION_DATE, mSessionDate);
-		    	addAttributeWithS(DataOutHandlerTags.SESSION_ID, String.valueOf(mSessionId));
-		    	addAttributeWithS(DataOutHandlerTags.APP_NAME, mAppName);
-		    	addAttributeWithS(DataOutHandlerTags.DATA_TYPE, mDataType);
-		    	addAttributeWithS(DataOutHandlerTags.PLATFORM, "Android");
-		    	addAttributeWithS(DataOutHandlerTags.PLATFORM_VERSION, Build.VERSION.RELEASE);
-			}
-			else if (mDatabaseType == DATABASE_TYPE_T2_DRUPAL) {
-				
-		    	mItem.put("title", id);
-		    	mItem.put("type", "sensor_data");
-		    	mItem.put("language", "und");
-		    	
-		    	putDrupalNode(DataOutHandlerTags.RECORD_ID, id, mItem);
-		    	putDrupalNode(DataOutHandlerTags.TIME_STAMP, currentTime, mItem);
-		    	putDrupalNode(DataOutHandlerTags.CREATED_AT, currentTimeString, mItem);
-		    	putDrupalNode(DataOutHandlerTags.USER_ID, mUserId, mItem);
-		    	putDrupalNode(DataOutHandlerTags.SESSION_DATE, mSessionDate, mItem);
-		    	if (mSessionIdEnabled)
-		    		putDrupalNode(DataOutHandlerTags.SESSION_ID, mSessionId, mItem);
-		    	putDrupalNode(DataOutHandlerTags.APP_NAME, mAppName, mItem);
-		    	putDrupalNode(DataOutHandlerTags.DATA_TYPE, mDataType, mItem);
-		    	putDrupalNode(DataOutHandlerTags.PLATFORM, "Android", mItem);
-		    	putDrupalNode(DataOutHandlerTags.PLATFORM_VERSION, Build.VERSION.RELEASE, mItem);
-				
-			}
-			else {
-		    	mItem.put(DataOutHandlerTags.RECORD_ID, id);
-		    	mItem.put(DataOutHandlerTags.TIME_STAMP, currentTime);
-		    	mItem.put(DataOutHandlerTags.CREATED_AT, currentTimeString);
-		    	mItem.put(DataOutHandlerTags.USER_ID, mUserId);
-		    	mItem.put(DataOutHandlerTags.SESSION_DATE, mSessionDate);
-		    	if (mSessionIdEnabled) {
-			    	mItem.put(DataOutHandlerTags.SESSION_ID, mSessionId);
-		    	}
-		    	mItem.put(DataOutHandlerTags.APP_NAME, mAppName);
-		    	mItem.put(DataOutHandlerTags.DATA_TYPE, mDataType);
-		    	mItem.put(DataOutHandlerTags.PLATFORM, "Android");		    	
-		    	mItem.put(DataOutHandlerTags.PLATFORM_VERSION, Build.VERSION.RELEASE);				
-				
+		if (mRequiresAuthentication == true && mAuthenticated == false) {
+			throw new DataOutHandlerException("User is not authenticated");
+		}
+		int i = 0;
+		i++;
+		
+		
+		//packet.mItem.put("data", packet.mData);		
+		
+//		if (mLogFormat == LOG_FORMAT_JSON) {
+//			packet.mStr += "},";
+//		}
+//
+//		if (mLoggingEnabled) {	
+//			mLogWriter.write(packet.mStr);
+//		}
+//
+//		if (mLogCatEnabled) {
+//			Log.d(TAG, packet.mStr);			
+//		}
+		
+		if (mDatabaseEnabled) {
+			Log.d(TAG, "Queueing document " + packet.mId);
+
+			synchronized(mPendingQueue) {
+				mPendingQueue.add(0,  packet);
 			}
 		}
+	}	
 
+    /**
+     * Sends a specific json string to Drupal database for processing
+     * 
+     * @param jsonString
+     */
+    void drupalNodePut(String jsonString) {
+        UserServices us;
+        us = new UserServices(mServicesClient);
+
+        JsonHttpResponseHandler responseHandler = new JsonHttpResponseHandler() {
+            @Override
+            public void onSuccess(JSONObject response) {
+                try {
+                    String s = response.getString("nid");
+                    Log.d(TAG, "Successfully submitted article # " + s.toString());
+                    
+                } catch (JSONException e) {
+                    Log.e(TAG, e.toString());
+                }
+            }
+
+            @Override
+            public void onFailure(Throwable e, JSONObject response) {
+                Log.e(TAG, e.toString());
+                Log.e("Tag", response.toString());
+            }
+
+            @Override
+            public void onFinish() {
+                Log.d(TAG, "onFinish()");
+            	
+            }
+        };        
+        us.NodePut(jsonString, responseHandler);
+    } 	
+		
+	
+	/**
+	 * @author scott.coleman
+	 *
+	 * This thread handles maintenance of the mPendingQueue
+	 * sending data out if the network is available.
+	 * 
+	 */
+	class DispatchThread extends Thread {
+		private boolean isRunning = false;
+		private boolean cancelled = false;
+
+		@Override
+		public void run() {
+			isRunning = true;
+			
+			while(true) {
+				// Break out if this was cancelled.
+				if(cancelled) {
+					break;
+				}
+				
+				try {
+					Thread.sleep(4000);
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				Log.d(TAG, "Http dispatch thread tick");
+
+				// If the network is available post entries from the PendingQueue
+				if (isNetworkAvailable()) {
+					synchronized(mPendingQueue) {
+						
+						if (mPendingQueue.size() > 0) {						
+							Log.d(TAG, "pending queue size =  " + mPendingQueue.size() );
+	
+							// Fill the posting Queue with all of the items that need to be posted
+							// We need this array so when we get a response we can remove all of these entries from the PendingQueue
+							String jsonString  = "[";
+							int iteration = 0;
+							Iterator<DataOutPacket> iterator = mPendingQueue.iterator();						
+							while(iterator.hasNext()) {
+								
+								DataOutPacket packet = iterator.next();
+								Log.d(TAG, "Posting document " + packet.mId);
+								
+								if (mLogFormat == LOG_FORMAT_JSON) {
+									packet.mLoggingString = "{" + SHORT_TIME_STAMP + ":" + packet.mCurrentTime + ",";			
+								}
+								else {
+									packet.mLoggingString = SHORT_TIME_STAMP + ",";			
+								}							
+							
+								// Note that AWS and DRUPAL send only one packet at a time.
+								// T2REST has the ability to send multiple packets in a JSON array
+								if (mDatabaseType == DATABASE_TYPE_T2_DRUPAL) {
+									ObjectNode item = JsonNodeFactory.instance.objectNode();
+									item.put("title", packet.mId);
+									item.put("type", "sensor_data");
+									item.put("language", "und");										
+
+									Iterator it = packet.mItemsMap.entrySet().iterator();
+									while (it.hasNext()) {
+										Map.Entry pairs = (Map.Entry)it.next();	
+								        if (pairs.getValue() instanceof Integer) {
+								        	putDrupalNode((String)pairs.getKey(), (Integer)pairs.getValue(), item);								        	
+											packet.mLoggingString += formatTextForLog(mDatabaseType, pairs);
+								        }
+								        if (pairs.getValue() instanceof String) {
+								        	putDrupalNode((String)pairs.getKey(), (String)pairs.getValue(), item);								        	
+											packet.mLoggingString += formatTextForLog(mDatabaseType, pairs);
+								        }
+								        if (pairs.getValue() instanceof Long) {
+								        	putDrupalNode((String)pairs.getKey(), (Long)pairs.getValue(), item);								        	
+											packet.mLoggingString += formatTextForLog(mDatabaseType, pairs);
+								        }
+								        if (pairs.getValue() instanceof Double) {
+								        	putDrupalNode((String)pairs.getKey(), (Double)pairs.getValue(), item);								        	
+											packet.mLoggingString += formatTextForLog(mDatabaseType, pairs);
+								        }
+								        if (pairs.getValue() instanceof Vector) {
+											// Note special format for vector in drupal!
+											String newTag = "field_" + ((String) pairs.getKey()).toLowerCase();
+											ObjectNode undNode = JsonNodeFactory.instance.objectNode();		
+											ArrayNode arrayNode = JsonNodeFactory.instance.arrayNode();		
+
+								        	// TODO: Potential problem - saves all of the vector items as type STRING
+											for (Object v : (Vector) pairs.getValue()) {
+												ObjectNode valueNode = JsonNodeFactory.instance.objectNode();		
+												valueNode.put("value", v.toString());
+												arrayNode.add(valueNode);	
+											}
+											
+											undNode.put("und", arrayNode);			
+											item.put(newTag, undNode);									        	
+											packet.mLoggingString += formatTextForLog(mDatabaseType, pairs);
+								        }										
+										
+									} // End while (it.hasNext())
+							        // Check to see if we've stored a Drupal session cookie. If so then attach then to 
+							        // the http client
+							        T2CookieStore.getInstance();
+							        Cookie cookie = T2CookieStore.getInstance().getSessionCookie();
+							        if (cookie != null) {
+							        	
+							        	
+							          mCookieStore.addCookie(cookie);
+							          mServicesClient.setCookieStore(mCookieStore);        
+
+							          // TODO: change to debug - it's at error now simply for readability
+							          Log.e(TAG, "Using session cookie: " + cookie.toString());
+							        }
+							        else {
+							            Log.e(TAG, "No Stored Cookies to use: ");
+							        }   								
+									
+									//Log.d(TAG, "Posting entry " + item.toString());
+							        
+									drupalNodePut(item.toString());									
+		
+								} // End if (mDatabaseType == DATABASE_TYPE_T2_DRUPAL)
+								
+								
+								if (mDatabaseType == DATABASE_TYPE_AWS) {
+									
+									// First need to format this packet for AWS
+									HashMap<String, AttributeValue> hashMap = new HashMap<String, AttributeValue>();									
+									Iterator it = packet.mItemsMap.entrySet().iterator();
+									while (it.hasNext()) {
+										Map.Entry pairs = (Map.Entry)it.next();
+										
+								        if (pairs.getValue() instanceof Integer) {
+											packet.mLoggingString += formatTextForLog(mDatabaseType, pairs);
+											AttributeValue attr = new AttributeValue().withS(String.valueOf(pairs.getValue()));	
+											hashMap.put((String)pairs.getKey(), attr);								        	
+								        }
+								        if (pairs.getValue() instanceof String) {
+											packet.mLoggingString += formatTextForLog(mDatabaseType, pairs);
+											AttributeValue attr = new AttributeValue().withS((String)pairs.getValue());	
+											hashMap.put((String)pairs.getKey(), attr);								        	
+								        }
+								        if (pairs.getValue() instanceof Long) {
+											packet.mLoggingString += formatTextForLog(mDatabaseType, pairs);
+											AttributeValue attr = new AttributeValue().withS(String.valueOf(pairs.getValue()));	
+											hashMap.put((String)pairs.getKey(), attr);								        	
+								        }
+								        if (pairs.getValue() instanceof Double) {
+											packet.mLoggingString += formatTextForLog(mDatabaseType, pairs);
+											AttributeValue attr = new AttributeValue().withS(String.valueOf(pairs.getValue()));	
+											hashMap.put((String)pairs.getKey(), attr);								        	
+								        }
+								        if (pairs.getValue() instanceof Vector) {
+											packet.mLoggingString += formatTextForLog(mDatabaseType, pairs);
+											AttributeValue attr = new AttributeValue().withSS((Vector)pairs.getValue());	
+											hashMap.put((String)pairs.getKey(), attr);								        	
+								        }								
+									}		
+									
+	
+																	
+									AmazonDynamoDBClient ddb = DataOutHandler.sClientManager
+											.ddb();
+									try {
+										
+										PutItemRequest request = new PutItemRequest().withTableName(
+												mAwsTableName)
+												.withItem(hashMap);
+	
+										ddb.putItem(request);
+										Log.d(TAG, "AWS Posting Successful: ");
+										
+									} catch (AmazonServiceException ex) {
+										DataOutHandler.sClientManager
+												.wipeCredentialsOnAuthError(ex);
+										Log.d(TAG, "Error posting document " + ex.toString());
+									}	
+									catch (Exception ex) {
+										DataOutHandler.sClientManager.clearCredentials();
+										Log.d(TAG, "Error posting document " + ex.toString());
+									}									
+							    } // End if (mDatabaseType == DATABASE_TYPE_AWS)
+							
+								if (mDatabaseType == DATABASE_TYPE_T2_REST) {
+									ObjectNode item = JsonNodeFactory.instance.objectNode();;	
+									
+									HashMap<String, AttributeValue> hashMap = new HashMap<String, AttributeValue>();									
+									Iterator it = packet.mItemsMap.entrySet().iterator();
+									while (it.hasNext()) {
+										Map.Entry pairs = (Map.Entry)it.next();
+										
+								        if (pairs.getValue() instanceof Integer) {
+								        	item.put((String)pairs.getKey(),(Integer)pairs.getValue());
+											packet.mLoggingString += formatTextForLog(mDatabaseType, pairs);
+								        }
+								        if (pairs.getValue() instanceof String) {
+								        	item.put((String)pairs.getKey(),(String)pairs.getValue());
+											packet.mLoggingString += formatTextForLog(mDatabaseType, pairs);
+								        }
+								        if (pairs.getValue() instanceof Long) {
+								        	item.put((String)pairs.getKey(),(Long)pairs.getValue());
+											packet.mLoggingString += formatTextForLog(mDatabaseType, pairs);
+								        }
+								        if (pairs.getValue() instanceof Double) {
+								        	item.put((String)pairs.getKey(),(Double)pairs.getValue());
+											packet.mLoggingString += formatTextForLog(mDatabaseType, pairs);
+								        }
+								        if (pairs.getValue() instanceof Vector) {
+
+								        	// TODO: Potential problem - saves all of the vector items as type STRING
+								        	String vectorString = "";
+								        	ArrayNode arrayNode = JsonNodeFactory.instance.arrayNode();						
+											for (Object v : (Vector) pairs.getValue()) {
+												ObjectNode valueNode = JsonNodeFactory.instance.objectNode();		
+												valueNode.put("value", v.toString());
+												arrayNode.add(v.toString());	
+											}
+								        	item.put((String)pairs.getKey(),arrayNode);
+											packet.mLoggingString += formatTextForLog(mDatabaseType, pairs);
+								        }								
+									} // End while (it.hasNext())
+	
+									 if (iteration++ > 0)
+										 jsonString += "," + item.toString();
+									 else
+										 jsonString += item.toString();								
+									
+								} // End if (mDatabaseType == DATABASE_TYPE_T2_REST)							
+		
+								// We've processed one packet, now write to logs
+								if (mLogFormat == LOG_FORMAT_JSON) {
+									
+									// Remove the comma at the end of the string set
+									packet.mLoggingString = packet.mLoggingString.substring(0, packet.mLoggingString.length() - 1);
+									
+									// Now terminate the json string
+									packet.mLoggingString += "},";
+								}
+								
+								if (mLoggingEnabled) {	
+									mLogWriter.write(packet.mLoggingString);
+								}
+	
+								if (mLogCatEnabled) {
+									Log.d(TAG, packet.mLoggingString);			
+								}							
+							
+							} // End while(iterator.hasNext())
+	
+							mPendingQueue.clear();
+							
+							
+							// We've gone through all of the records in mPendingQueue 
+							jsonString += "]";
+							
+							if (mDatabaseType == DATABASE_TYPE_T2_REST) {
+								RequestParams params = new RequestParams("json", jsonString);
+								Log.d(TAG, "Sending to: " + mRemoteDatabase);
+								Log.e(TAG,  jsonString);
+								
+						        T2RestClient.post(mRemoteDatabase, params, new AsyncHttpResponseHandler() {
+						            @Override
+						            public void onSuccess(String response) {
+										Log.d(TAG, "T2Rest Posting Successful: " + response);
+						                
+						            }
+						        });								
+								
+							} // End if (mDatabaseType == DATABASE_TYPE_T2_REST)
+						} // End if (mPendingQueue.size() > 0)
+					} // End synchronized(mPendingQueue)
+
+				} // End if (isNetworkAvailable())
+			} // End while(true)
+				
+			isRunning = false;
+		} // End public void run() 
 		
 		/**
 		 * Writes drual formatted node to specified node (String)
@@ -805,499 +1037,70 @@ public class DataOutHandler implements JREngageDelegate {
 			undNode.put("und", arrayNode);			
 			node.put(newTag, undNode);
 		}
-		
-		/**
-		 * Checks to see if tag is valid (Conteined in DataOutHandlerTags)
-		 * @param tag Tag to check
-		 * @return true if value, false otherwise
-		 */
-		boolean checkTag(String tag) {
-			boolean found = false;
-			Field[] fields = DataOutHandlerTags.class.getDeclaredFields();
-			for (Field f : fields) {
-			    if (Modifier.isStatic(f.getModifiers())) {
-			    	if (f.getName().equalsIgnoreCase(tag)) {
-				        found = true;
-			    	}
-			    } 
-			}
-			return found;
-		}
-		
-		/**
-		 * @param identifier Data tag
-		 * @param attrVal value to save in the AWS map
-		 */
-		void addAttributeWithS(String identifier, String attrVal) {
-			
-			if (attrVal.equalsIgnoreCase(""))
-				return;
 				
-			AttributeValue attr = new AttributeValue().withS(attrVal);	
-			hashMap.put(identifier, attr);			
-		}
 		
 		/**
-		 * @param identifier Data tag
-		 * @param attrVal vector of attribute values
-		 */
-		void addAttributeWithSS(String identifier, Vector attrVal) {
-			
-			if (attrVal.size()== 0)
-				return;
-				
-			AttributeValue attr = new AttributeValue().withSS(attrVal);	
-			hashMap.put(identifier, attr);			
-		}		
-		
-		/**
-		 * Adds a tag/ data pair to the packet (as double) 
+		 * Formats a string that can be use for log files.
+		 *  format is based on log type and database type 
+		 * @param databaseType Type of database
+		 * @param pairs Map of data entry
 		 * 
-		 * @param tag Tag to associate with data
-		 * @param value Data to send
+		 * @return Formatted string based
 		 */
-		public void add(String tag, double value) {
+		String formatTextForLog(int databaseType, Map.Entry pairs) {
+			String result = "";
 			
-//			checkTag(tag);			
-			if (mLogFormat == LOG_FORMAT_JSON) {
-				mStr += String.format("%s:%f,", tag,value);
-			}
-			else {
-				mStr += "" + value + ",";			
-			}
-			
-			if (mDatabaseType == DATABASE_TYPE_AWS) {
-		    	addAttributeWithS(tag, String.valueOf(value));
-			}
-			else if (mDatabaseType == DATABASE_TYPE_T2_DRUPAL) {
-				putDrupalNode(tag, value, mItem);
-			}
-			else {
-				mItem.put(tag,value);	
-			}
-		}
-		
-		/**
-		 * Adds a tag/ data pair to the packet (as double) 
-		 * Same as add(String tag, double value) except for the log file
-		 * @param tag Tag to associate with data
-		 * @param value Data to send
-		 * @param format String format to format value with
-		 *  
-		 */
-		public void add(String tag, double value, String format) {
-			
-			if (mLogFormat == LOG_FORMAT_JSON) {
-				mStr += String.format("%s:" + format + ",", tag,value);
-			}
-			else {
-				mStr += "" + value + ",";			
-			}
-			
-			if (mDatabaseType == DATABASE_TYPE_AWS) {
-		    	addAttributeWithS(tag, String.valueOf(value));
-			}
-			else if (mDatabaseType == DATABASE_TYPE_T2_DRUPAL) {
-				putDrupalNode(tag, value, mItem);
-			}
-			else {
-				mItem.put(tag,value);	
-			}			
-		}
-		
-		/**
-		 * Adds a tag/ data pair to the packet (as long)
-		 *  
-		 * @param tag Tag to associate with data
-		 * @param value Data to send
-		 * 
-		 */		
-		public void add(String tag, long value) {
-			if (mLogFormat == LOG_FORMAT_JSON) {
-				mStr += tag + ":" + value + ",";			
-			}
-			else {
-				mStr += "" + value + ",";			
-			}
-			
-			if (mDatabaseType == DATABASE_TYPE_AWS) {
-		    	addAttributeWithS(tag, String.valueOf(value));
-			}
-			else if (mDatabaseType == DATABASE_TYPE_T2_DRUPAL) {
-				putDrupalNode(tag, value, mItem);
-			}
-			else {
-				mItem.put(tag,value);	
-			}				
-		}
-
-		/**
-		 * Adds a tag/ data pair to the packet (as int)
-		 *  
-		 * @param tag Tag to associate with data
-		 * @param value Data to send
-		 * 
-		 */
-		public void add(String tag, int value) {
-			if (mLogFormat == LOG_FORMAT_JSON) {
-				mStr += tag + ":" + value + ",";			
-			}
-			else {
-				mStr += "" + value + ",";			
-			}
-			
-			if (mDatabaseType == DATABASE_TYPE_AWS) {
-				addAttributeWithS(tag, String.valueOf(value));
-			}
-			else if (mDatabaseType == DATABASE_TYPE_T2_DRUPAL) {
-				putDrupalNode(tag, value, mItem);
-			}
-			else {
-				mItem.put(tag,value);	
-			}				
-		}
-
-		/**
-		 * Adds a tag/ data pair to the packet (as String)
-		 *  
-		 * @param tag Tag to associate with data
-		 * @param value Data to send
-		 * 
-		 */
-		public void add(String tag, String value) {
-			if (mLogFormat == LOG_FORMAT_JSON) {
-				mStr += tag + ":\"" + value + "\",";			
-			}
-			else {
-				mStr += "" + value + ",";			
-			}
-			
-			
-			if (mDatabaseType == DATABASE_TYPE_AWS) {
-				addAttributeWithS(tag, String.valueOf(value));
-			}
-			else if (mDatabaseType == DATABASE_TYPE_T2_DRUPAL) {
-				putDrupalNode(tag, value, mItem);
-			}
-			else {
-				mItem.put(tag,value);	
-			}
-		}
-		
-		
-		// TODO : fix vector add
-		
-		/**
-		 * Adds a tag/ data pair to the packet (as Vector)
-		 *  
-		 * @param tag Tag to associate with data
-		 * @param value Data to send
-		 * 
-		 */
-		public void add(String tag, Vector values) {
-			if (mLogFormat == LOG_FORMAT_JSON) {
-				mStr += tag + ":\"" + values.toString() + "\",";			
-			}
-			else {
-				mStr += "" + values.toString() + ",";			
-			}
-			
-			if (mDatabaseType == DATABASE_TYPE_AWS) {
-				addAttributeWithSS(tag, values);
-			}
-			else if (mDatabaseType == DATABASE_TYPE_T2_DRUPAL) {
-				// Note special format for vector in drupal!
-				String newTag = "field_" + tag.toLowerCase();
-				ObjectNode undNode = JsonNodeFactory.instance.objectNode();		
-				ArrayNode arrayNode = JsonNodeFactory.instance.arrayNode();		
-
-				for (Object v : values) {
-					ObjectNode valueNode = JsonNodeFactory.instance.objectNode();		
-					valueNode.put("value", v.toString());
-					arrayNode.add(valueNode);	
+	        if (pairs.getValue() instanceof Integer) {
+				if (mLogFormat == LOG_FORMAT_JSON) {
+					result = "\"" + pairs.getValue() + "\":" + pairs.getValue()  + ",";			
 				}
-				
-				undNode.put("und", arrayNode);			
-				mItem.put(newTag, undNode);				
-			}
-			else {
-				mItem.put(tag,values.toString());	
-			}			
-		}
-		 
-		/* (non-Javadoc)
-		 * Returns string representation of DataOutPac packet
-		 * @see java.lang.Object#toString()
-		 */
-		public String toString() {
-			return mStr;
-		}
-		
-	}
-
-	/**
-	 * Use DataOutPacket instead of sending a JSON object or array
-	 * 
-	 * @param jsonObject
-	 * @throws DataOutHandlerException
-	 * @deprecated
-	 */
-	public void handleDataOut(final ObjectNode jsonObject) throws DataOutHandlerException { // This one uses Android Jackson JSON objects
-		DataOutPacket packet = new DataOutPacket();
-		// To match our format we must remove the starting and ending curly brace
-		String tmp = jsonObject.toString();
-		tmp = tmp.substring(1,tmp.length() - 1);
-		packet.mStr += tmp;
-		
-		packet.mData.put("data", jsonObject);
-		
-		handleDataOut(packet);
-	}
-	
-	
-	/**
-	 * Use DataOutPacket instead of sending a JSON object or array
-	 *  
-	 * @param jsonArray
-	 * @throws DataOutHandlerException
-	 * @deprecated
-	 */
-	public void handleDataOut(final ArrayNode jsonArray) throws DataOutHandlerException {
-		DataOutPacket packet = new DataOutPacket();
-		// To match our format we must remove the starting and ending curly brace
-		String tmp = jsonArray.toString();
-		tmp = tmp.substring(1,tmp.length() - 1);
-		packet.mStr += tmp;
-		
-		packet.mData.put("data", jsonArray);
-		handleDataOut(packet);
-	}	
-	
-	/**
-	 * Sends a data packet to all configured output sinks (Database)
-	 * Actually it just puts it in the mPendingQueue to
-	 * be sent out later 
-	 * 
-	 * @param packet - data Packet to send to output sinks
-	 * @throws DataOutHandlerException 
-	 */
-	public void handleDataOut(final DataOutPacket packet) throws DataOutHandlerException {
-			
-
-		if (mRequiresAuthentication == true && mAuthenticated == false) {
-			throw new DataOutHandlerException("User is not authenticated");
-		}
-		int i = 0;
-		i++;
-		
-		
-		//packet.mItem.put("data", packet.mData);		
-		
-		if (mLogFormat == LOG_FORMAT_JSON) {
-			packet.mStr += "},";
-		}
-
-		if (mLoggingEnabled) {	
-			mLogWriter.write(packet.mStr);
-		}
-
-		if (mLogCatEnabled) {
-			Log.d(TAG, packet.mStr);			
-		}
-		
-		if (mDatabaseEnabled) {
-			String dataPacketString = packet.mItem.toString();
-			T2RestPacket pkt = new T2RestPacket(dataPacketString, packet.hashMap);
-			
-			Log.d(TAG, "Queueing document " + pkt.mId);
-
-			synchronized(mPendingQueue) {
-				mPendingQueue.add(0,  pkt);
-			}
-		}
-	}
-
-	/**
-	 * Logs a text note to sinks
-	 * 
-	 * @param note - Text not to log to sinks
-	 * @throws DataOutHandlerException 
-	 */
-	public void logNote(String note) throws DataOutHandlerException {
-		DataOutPacket packet = new DataOutPacket();
-		packet.add(DataOutHandlerTags.NOTE, note);
-		handleDataOut(packet);				
-	}
-	
-    /**
-     * Sends a specific json string to Drupal database for processing
-     * 
-     * @param jsonString
-     */
-    void drupalNodePut(String jsonString) {
-        UserServices us;
-        us = new UserServices(mServicesClient);
-
-        JsonHttpResponseHandler responseHandler = new JsonHttpResponseHandler() {
-            @Override
-            public void onSuccess(JSONObject response) {
-                try {
-                    String s = response.getString("nid");
-                    Log.d(TAG, "Successfully submitted article # " + s.toString());
-                    
-                } catch (JSONException e) {
-                    Log.e(TAG, e.toString());
-                }
-            }
-
-            @Override
-            public void onFailure(Throwable e, JSONObject response) {
-                Log.e(TAG, e.toString());
-                Log.e("Tag", response.toString());
-            }
-
-            @Override
-            public void onFinish() {
-                Log.d(TAG, "onFinish()");
-            	
-            }
-        };        
-        us.NodePut(jsonString, responseHandler);
-    } 	
-	
-	
-	/**
-	 * @author scott.coleman
-	 *
-	 * This thread handles maintenance of the mPendingQueue
-	 * sending data out if the network is available.
-	 * 
-	 */
-	class DispatchThread extends Thread {
-		private boolean isRunning = false;
-		private boolean cancelled = false;
-
-		@Override
-		public void run() {
-			isRunning = true;
-			
-			while(true) {
-				// Break out if this was cancelled.
-				if(cancelled) {
-					break;
+				else {
+					result = "" + pairs.getValue()  + ",";			
+				}							        	
+	        }
+	        if (pairs.getValue() instanceof String) {
+				if (mLogFormat == LOG_FORMAT_JSON) {
+					result = "\"" + pairs.getKey() + "\":\"" + pairs.getValue() + "\",";			
 				}
-				
-				try {
-					Thread.sleep(4000);
-				} catch (InterruptedException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
+				else {
+					result = "" + pairs.getValue() + ",";			
+				}							        	
+	        }
+	        if (pairs.getValue() instanceof Long) {
+				if (mLogFormat == LOG_FORMAT_JSON) {
+					result = "\"" + pairs.getKey() + "\":" + pairs.getValue() + ",";			
 				}
-				Log.d(TAG, "Http dispatch thread tick");
-
-				// If the network is available post entries from the PendingQueue
-				if (isNetworkAvailable()) {
-					synchronized(mPendingQueue) {
-	
-						if (mPendingQueue.size() > 0) {
-							Log.d(TAG, "pending queue size =  " + mPendingQueue.size() );
-
-							// Fill the posting Queue with all of the items that need to be posted
-							// We need this array so when we get a response we can remove all of these entries from the PendingQueue
-							String jsonString  = "[";
-							int iteration = 0;
-							Iterator<T2RestPacket> iterator = mPendingQueue.iterator();						
-							while(iterator.hasNext()) {
-								
-								T2RestPacket packet = iterator.next();
-								Log.d(TAG, "Posting document " + packet.mId);
-								if (packet.mStatus == T2RestPacket.STATUS_PENDING) {
-									
-									 packet.mStatus = T2RestPacket.STATUS_POSTED;
-									 
-									 if (iteration++ > 0)
-										 jsonString += "," + packet.mJson;
-									 else
-										 jsonString += packet.mJson;
-										 
-								}
-								
-								// Note that AWS and DRUPAL send only one packet at a time.
-								// T2REST has the ability to send multiple packets in a JSON array
-								
-
-								if (mDatabaseType == DATABASE_TYPE_T2_DRUPAL) {
-							        // Check to see if we've stored a Drupal session cookie. If so then attach then to 
-							        // the http client
-							        T2CookieStore.getInstance();
-							        Cookie cookie = T2CookieStore.getInstance().getSessionCookie();
-							        if (cookie != null) {
-							        	
-							        	
-							          mCookieStore.addCookie(cookie);
-							          mServicesClient.setCookieStore(mCookieStore);        
-
-							          // TODO: change to debug - it's at error now simply for readability
-							          Log.e(TAG, "Using session cookie: " + cookie.toString());
-							        }
-							        else {
-							            Log.e(TAG, "No Stored Cookies to use: ");
-							        }   								
-									
-									Log.d(TAG, "Posting entry " + packet.mJson.toString());
-							        
-									drupalNodePut(packet.mJson.toString());
-								} // End if (mDatabaseType == DATABASE_TYPE_T2_DRUPAL)
-								
-								
-								if (mDatabaseType == DATABASE_TYPE_AWS) {
-									AmazonDynamoDBClient ddb = DataOutHandler.sClientManager
-											.ddb();
-									try {
-										
-										PutItemRequest request = new PutItemRequest().withTableName(
-												mAwsTableName)
-												.withItem(packet.mHashMap);
-
-										ddb.putItem(request);
-										Log.d(TAG, "AWS Posting Successful: ");
-										
-									} catch (AmazonServiceException ex) {
-										DataOutHandler.sClientManager
-												.wipeCredentialsOnAuthError(ex);
-										Log.d(TAG, "Error posting document " + ex.toString());
-									}	
-									catch (Exception ex) {
-										DataOutHandler.sClientManager.clearCredentials();
-										Log.d(TAG, "Error posting document " + ex.toString());
-									}									
-								}
-							}
-							
-							jsonString += "]";
-							
-							if (mDatabaseType == DATABASE_TYPE_T2_REST) {
-								RequestParams params = new RequestParams("json", jsonString);
-								Log.d(TAG, "Sending to: " + mRemoteDatabase);
-								
-						        T2RestClient.post(mRemoteDatabase, params, new AsyncHttpResponseHandler() {
-						            @Override
-						            public void onSuccess(String response) {
-										Log.d(TAG, "T2Rest Posting Successful: " + response);
-						                
-						            }
-						        });	
-							}							
-
-							mPendingQueue.clear();
-						} // End if (mPendingQueue.size() > 0)
-					} // End synchronized(mPendingQueue) 
+				else {
+					result = "" + pairs.getValue() + ",";			
+				}							        	
+	        }
+	        if (pairs.getValue() instanceof Double) {
+				if (mLogFormat == LOG_FORMAT_JSON) {
+					result = String.format("\"%s\":\"%f\",", pairs.getKey(),pairs.getValue());
 				}
-			} // End while(true)
+				else {
+					result = "" + pairs.getValue() + ",";			
+				}							        	
+	        }
+	        if (pairs.getValue() instanceof Vector) {
+				if (mLogFormat == LOG_FORMAT_JSON) {
+					ArrayNode arrayNode = JsonNodeFactory.instance.arrayNode();						
+					for (Object v : (Vector) pairs.getValue()) {
+						ObjectNode valueNode = JsonNodeFactory.instance.objectNode();		
+						valueNode.put("value", v.toString());
+						arrayNode.add(v.toString());	
+					}
+					result = "\"" + pairs.getKey() + "\":" + arrayNode.toString() + ",";
+				}
+				else {
+					result = "" + pairs.getValue().toString() + ",";			
+				}							        	
+	        }								
+			
+			
+			return result;
+		}
 
-			isRunning = false;
-		} // End public void run() 
-		
 		/**
 		 * Cancel the loop
 		 */
@@ -1314,7 +1117,7 @@ public class DataOutHandler implements JREngageDelegate {
 		public boolean isRunning() {
 			return this.isRunning;
 		}
-	}
+	} // End DispatchThread
 	
     /**
      * @return true if network is available
@@ -1329,8 +1132,8 @@ public class DataOutHandler implements JREngageDelegate {
             return true;
         }
         return false;
-    }
-
+    }	
+	
     // JanRain Delegates (status callbacks)
     
     
@@ -1339,13 +1142,13 @@ public class DataOutHandler implements JREngageDelegate {
 			String provider) {
 		Log.d(TAG, "jrAuthenticationDidSucceedForUser");		
 		
+	    mAuth_info = auth_info;
 		// Note, if we're using drupal the authentication isn't 
 		// really done until the callback URL has been called
 		// This sets up the Drupal Database
 		if (mDatabaseType == DATABASE_TYPE_T2_DRUPAL) {
 			
 		} else {
-		    mAuth_info = auth_info;
 			mAuthProvider = provider;		
 			mAuthenticated = true;
 			
