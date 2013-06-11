@@ -1053,7 +1053,7 @@ public class DataOutHandler  implements JREngageDelegate {
 			
 	        if (pairs.getValue() instanceof Integer) {
 				if (mLogFormat == LOG_FORMAT_JSON) {
-					result = "\"" + pairs.getValue() + "\":" + pairs.getValue()  + ",";			
+					result = "\"" + pairs.getKey() + "\":" + pairs.getValue()  + ",";			
 				}
 				else {
 					result = "" + pairs.getValue()  + ",";			
