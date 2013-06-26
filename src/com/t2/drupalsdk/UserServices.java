@@ -46,8 +46,22 @@ public class UserServices {
         mServicesClient.post("user/logout", new JSONObject(), responseHandler);
     }
 
+    /**
+     * Gets a specific drupal node
+     * 
+     * @param node Node to retrieve
+     * @param responseHandler Handler for response
+     */
     public void NodeGet( int node, AsyncHttpResponseHandler responseHandler) {
         mServicesClient.get("node/" + node, new RequestParams(), responseHandler);
+    }
+
+    /**
+     * Gets all Drupal nodes
+     * @param responseHandler Handler for response
+     */
+    public void NodeGet( AsyncHttpResponseHandler responseHandler) {
+        mServicesClient.get("node/", new RequestParams(), responseHandler);
     }
 
     public void NodePut( String jsonString, AsyncHttpResponseHandler responseHandler) {
