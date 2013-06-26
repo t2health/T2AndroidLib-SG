@@ -38,8 +38,6 @@ public class ServicesClient {
     }
 
     public void setCookieStore(PersistentCookieStore cookieStore) {
-    	Log.e("ServicesClient", " set cookie store in " + mAsyncHttpClient.toString());
-    	Log.e("ServicesClient", " set cookie store in " + mAsyncHttpClient.getHttpClient().toString());
         mAsyncHttpClient.setCookieStore(cookieStore);
     }
 

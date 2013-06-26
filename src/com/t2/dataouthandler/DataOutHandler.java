@@ -1,3 +1,35 @@
+/*****************************************************************
+DataOutHandler
+
+Copyright (C) 2011 The National Center for Telehealth and 
+Technology
+
+Eclipse Public License 1.0 (EPL-1.0)
+
+This library is free software; you can redistribute it and/or
+modify it under the terms of the Eclipse Public License as
+published by the Free Software Foundation, version 1.0 of the 
+License.
+
+The Eclipse Public License is a reciprocal license, under 
+Section 3. REQUIREMENTS iv) states that source code for the 
+Program is available from such Contributor, and informs licensees 
+how to obtain it in a reasonable manner on or through a medium 
+customarily used for software exchange.
+
+Post your updates and modifications to our GitHub or email to 
+t2@tee2.org.
+
+This library is distributed WITHOUT ANY WARRANTY; without 
+the implied warranty of MERCHANTABILITY or FITNESS FOR A 
+PARTICULAR PURPOSE.  See the Eclipse Public License 1.0 (EPL-1.0)
+for more details.
+ 
+You should have received a copy of the Eclipse Public License
+along with this library; if not, 
+visit http://www.opensource.org/licenses/EPL-1.0
+
+*****************************************************************/
 package com.t2.dataouthandler;
 
 import java.text.SimpleDateFormat;
@@ -41,7 +73,6 @@ import com.janrain.android.engage.JREngageError;
 import com.janrain.android.engage.net.async.HttpResponseHeaders;
 import com.janrain.android.engage.types.JRActivityObject;
 import com.janrain.android.engage.types.JRDictionary;
-import com.janrain.android.utils.T2CookieStore;
 import com.loopj.android.http.AsyncHttpResponseHandler;
 import com.loopj.android.http.JsonHttpResponseHandler;
 import com.loopj.android.http.PersistentCookieStore;
@@ -236,6 +267,14 @@ public class DataOutHandler  implements JREngageDelegate {
 	 * Static instance of this class
 	 */
 	private static DataOutHandler sDataOutHandler;	
+	
+	
+	/**
+	 * Session cookie Janrain Obtains from Drupal for active session
+	 */
+	private Cookie drupalSessionCookie;
+	
+	
 	
 	/**
 	 * Sets the AWS table name (applicable only if AWS database is chosen)
@@ -533,6 +572,7 @@ public class DataOutHandler  implements JREngageDelegate {
 	 */
 	public void logOut() {
 		mAuthenticated = false;
+		drupalSessionCookie = null;		
 	}
 	
 	
@@ -868,18 +908,15 @@ public class DataOutHandler  implements JREngageDelegate {
 								        }										
 										
 									} // End while (it.hasNext())
-							        // Check to see if we've stored a Drupal session cookie. If so then attach then to 
+
+									// Check to see if we've stored a Drupal session cookie. If so then attach then to 
 							        // the http client
-							        T2CookieStore.getInstance();
-							        Cookie cookie = T2CookieStore.getInstance().getSessionCookie();
-							        if (cookie != null) {
-							        	
-							        	
-							          mCookieStore.addCookie(cookie);
+							        if (drupalSessionCookie != null) {
+							          mCookieStore.addCookie(drupalSessionCookie);
 							          mServicesClient.setCookieStore(mCookieStore);        
 
 							          // TODO: change to debug - it's at error now simply for readability
-							          Log.e(TAG, "Using session cookie: " + cookie.toString());
+							          Log.e(TAG, "Using session cookie: " + drupalSessionCookie.toString());
 							        }
 							        else {
 							            Log.e(TAG, "No Stored Cookies to use: ");
@@ -1257,9 +1294,19 @@ public class DataOutHandler  implements JREngageDelegate {
 			String provider) {
 		Log.d(TAG, "jrAuthenticationDidReachTokenUrl");		
 
-		// HA - a better way to get the Drupal sesion cookie!
+		// Check to see of Janrain is supplying a drupal session cookie
 		org.apache.http.cookie.Cookie[] mSessionCookies;
 		mSessionCookies = responseHeaders.getCookies();
+		
+		for (Cookie cookie : mSessionCookies) {
+        	System.out.println("Cookie! - " + cookie.toString());
+        	System.out.println("Cokie Name - " + cookie.getName());
+        	
+        	if (cookie.getName().startsWith("SESS") || cookie.getName().startsWith("SSESS")) {
+        		drupalSessionCookie = cookie;
+        		Log.e(TAG, "saving session cookie: " + cookie.toString()); 
+        	}			
+		}
 		
 		
 		
