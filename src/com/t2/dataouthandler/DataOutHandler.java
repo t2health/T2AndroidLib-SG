@@ -1,10 +1,10 @@
 /* T2AndroidLib-SG for Signal Processing
  * 
- * Copyright © 2009-2012 United States Government as represented by 
+ * Copyright © 2009-2013 United States Government as represented by 
  * the Chief Information Officer of the National Center for Telehealth 
  * and Technology. All Rights Reserved.
  * 
- * Copyright © 2009-2012 Contributors. All Rights Reserved. 
+ * Copyright © 2009-2013 Contributors. All Rights Reserved. 
  * 
  * THIS OPEN SOURCE AGREEMENT ("AGREEMENT") DEFINES THE RIGHTS OF USE, 
  * REPRODUCTION, DISTRIBUTION, MODIFICATION AND REDISTRIBUTION OF CERTAIN 
@@ -566,8 +566,11 @@ public class DataOutHandler  implements JREngageDelegate {
 	 * Cancells authentication
 	 */
 	public void logOut() {
+		Log.d(TAG, "DataOuthandler Logging out");		
 		mAuthenticated = false;
-		drupalSessionCookie = null;		
+		drupalSessionCookie = null;
+        mCookieStore.clear();
+        mServicesClient.setCookieStore(mCookieStore);         
 	}
 	
 	

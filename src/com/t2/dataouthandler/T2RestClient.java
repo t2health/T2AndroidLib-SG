@@ -1,10 +1,10 @@
 /* T2AndroidLib for Signal Processing
  * 
- * Copyright © 2009-2012 United States Government as represented by 
+ * Copyright © 2009-2013 United States Government as represented by 
  * the Chief Information Officer of the National Center for Telehealth 
  * and Technology. All Rights Reserved.
  * 
- * Copyright © 2009-2012 Contributors. All Rights Reserved. 
+ * Copyright © 2009-2013 Contributors. All Rights Reserved. 
  * 
  * THIS OPEN SOURCE AGREEMENT ("AGREEMENT") DEFINES THE RIGHTS OF USE, 
  * REPRODUCTION, DISTRIBUTION, MODIFICATION AND REDISTRIBUTION OF CERTAIN 
