@@ -14,6 +14,7 @@ import org.apache.http.cookie.Cookie;
 import org.codehaus.jackson.node.ArrayNode;
 import org.codehaus.jackson.node.JsonNodeFactory;
 import org.codehaus.jackson.node.ObjectNode;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.t2health.lib1.LogWriter;
@@ -85,6 +86,9 @@ public class DataOutHandler  implements JREngageDelegate {
 	public boolean mLoggingEnabled = false;	
 	private boolean mDatabaseEnabled = false;
 	private boolean mSessionIdEnabled = false;
+	
+	private String mResult;
+
 	
 	/**
 	 * User identification to be associated with data stored
@@ -451,7 +455,7 @@ public class DataOutHandler  implements JREngageDelegate {
 		        mEngage = JREngage.initInstance(mContext, mEngageAppId, "", this);
 //		        mEngage = JREngage.initInstance(mContext, mEngageAppId, mEngageTokenUrl, this);
 		        JREngage.blockOnInitialization();
-				
+
 				
 				//	clientManager = new AmazonClientManager(mContext.getSharedPreferences("com.amazon.aws.demo.AWSDemo", Context.MODE_PRIVATE), mRemoteDatabase);	
 				sClientManager = new AmazonClientManager(mSharedPreferences, mRemoteDatabase);	
@@ -674,13 +678,23 @@ public class DataOutHandler  implements JREngageDelegate {
                 }
             }
 
+			@Override
+			public void onSuccess(JSONArray arg0) {
+                Log.d(TAG, "Successfully submitted ARRAY " + arg0.toString());
+			}
+            
             @Override
             public void onFailure(Throwable e, JSONObject response) {
                 Log.e(TAG, e.toString());
-                Log.e("Tag", response.toString());
             }
-
+            
             @Override
+			public void onFailure(Throwable arg0, JSONArray arg1) {
+                Log.e(TAG, arg0.toString());
+			}
+
+
+			@Override
             public void onFinish() {
                 Log.d(TAG, "onFinish()");
             	
@@ -689,6 +703,71 @@ public class DataOutHandler  implements JREngageDelegate {
         us.NodePut(jsonString, responseHandler);
     } 	
 		
+    /**
+     * 
+     * 
+     * @param jsonString
+     */
+    public void drupalNodeGet(String nodeStr) {
+        UserServices us;
+        int nodeNum = 0;
+        
+        us = new UserServices(mServicesClient);
+
+        if (!nodeStr.equalsIgnoreCase("*")) {
+        	try {
+        		nodeNum = Integer.parseInt(nodeStr);
+			} catch (NumberFormatException e1) {
+				nodeStr = "*";
+			}
+        	
+        }
+        
+        JsonHttpResponseHandler responseHandler = new JsonHttpResponseHandler() {
+            @Override
+            public void onSuccess(JSONObject response) {
+                try {
+                	mResult = response.toString(); 
+                	String s = response.getString("nid");
+                    Log.d(TAG, "Received: " + s.toString());
+                    
+                } catch (JSONException e) {
+                    Log.e(TAG, e.toString());
+                }
+            }
+
+			@Override
+			public void onSuccess(JSONArray arg0) {
+				// TODO Auto-generated method stub
+				super.onSuccess(arg0);
+			}
+
+            
+            @Override
+            public void onFailure(Throwable e, JSONObject response) {
+                Log.e(TAG, e.toString());
+            }
+            
+            @Override
+			public void onFailure(Throwable arg0, JSONArray arg1) {
+                Log.e(TAG, arg0.toString());
+			}
+
+			@Override
+            public void onFinish() {
+                Log.d(TAG, "onFinish()");
+            	
+            }
+        };        
+        
+        if (nodeStr.equalsIgnoreCase("*")) {
+            us.NodeGet(responseHandler);
+        }
+        else {
+            us.NodeGet(nodeNum, responseHandler);
+        }
+        
+    }     
 	
 	/**
 	 * @author scott.coleman
@@ -1178,9 +1257,21 @@ public class DataOutHandler  implements JREngageDelegate {
 			String provider) {
 		Log.d(TAG, "jrAuthenticationDidReachTokenUrl");		
 
+		// HA - a better way to get the Drupal sesion cookie!
+		org.apache.http.cookie.Cookie[] mSessionCookies;
+		mSessionCookies = responseHeaders.getCookies();
+		
+		
+		
 		mAuthenticated = true;
 		if (mT2AuthDelegate != null) {
 			mT2AuthDelegate.T2AuthSuccess(mAuth_info, mAuthProvider, responseHeaders, responsePayload);
+			
+			// TMP Get all drupal nodes for a test
+//			drupalNodesGet();			
+			
+			
+			
 		}
 	}
 
